@@ -50,6 +50,8 @@ import {
 
 let mapNumber = 0;
 const memory = new Map<string, string>();
+let previousPack: typeof globalThis.pack;
+let previousOptions: typeof globalThis.options;
 
 function installStorage(): void {
   Object.defineProperty(globalThis, "localStorage", {
@@ -133,6 +135,8 @@ function setupMap(): void {
 
 describe("player mode campaign engine", () => {
   beforeEach(() => {
+    previousPack = globalThis.pack;
+    previousOptions = globalThis.options;
     installStorage();
     setupMap();
     vi.clearAllMocks();
@@ -140,6 +144,8 @@ describe("player mode campaign engine", () => {
 
   afterEach(() => {
     memory.clear();
+    globalThis.pack = previousPack;
+    globalThis.options = previousOptions;
   });
 
   it("charges a market before construction and records recurring upkeep", () => {
