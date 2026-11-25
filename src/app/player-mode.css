@@ -10,7 +10,10 @@
   color: #f7f0df;
   background: #263b36;
   box-shadow: 0 3px 12px rgb(0 0 0 / 24%);
-  font: 700 12px/1.2 inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
   letter-spacing: 0.06em;
   cursor: pointer;
 }
