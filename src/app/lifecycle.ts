@@ -5,6 +5,7 @@ import { hideLoading, showLoading } from "@/app/loading";
 import { setSeed } from "@/app/seed";
 import { initShell, warnIfServerless } from "@/app/shell";
 import { Controllers } from "@/controllers";
+import { PlayerMode } from "./player-mode";
 import { getPointsNumber } from "@/data/graph-density";
 import { GenerationPipeline } from "@/model/generation-pipeline";
 import { Icons } from "@/model/icons";
@@ -38,6 +39,7 @@ export async function boot(): Promise<void> {
   stashCallbackToken(); // before anything reads the URL: the OAuth fragment is not a load parameter
   registerServiceWorker();
   initShell();
+  PlayerMode.init();
   declareDefaultFonts();
 
   Options.restore();
