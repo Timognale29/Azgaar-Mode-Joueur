@@ -328,6 +328,16 @@ export function relationScore(subjectId: number, objectId: number): number {
   return score;
 }
 
+function removeTariffsAgainst(stateId: number, partnerId: number): void {
+  const state = stateById(stateId);
+  const tariffs = state.economy.tariffs.flatMap(rule => {
+    if (rule.states === "all" || !rule.states.includes(partnerId)) return [rule];
+    const remaining = rule.states.filter(id => id !== partnerId);
+    return remaining.length ? [{...rule, states: remaining}] : [];
+  });
+  States.setTariffs(stateId, tariffs);
+}
+
 function treatyExists(kind: TreatyKind, a: number, b: number): boolean {
   const save = getOrCreateCampaign();
   return save.treaties.some(treaty => treaty.kind === kind && treaty.status === "active" &&
@@ -353,9 +363,18 @@ export function negotiate(playerId: number, targetId: number, kind: TreatyKind |
     return {accepted: false, score, cost};
   }
 
-  if (kind === "alliance") States.setRelation(playerId, targetId, "Ally");
-  else if (kind === "paix") States.setRelation(playerId, targetId, "Friendly");
-  else if ((player.diplomacy?.[targetId] ?? "Neutral") === "Neutral") States.setRelation(playerId, targetId, "Friendly");
+  if (kind === "alliance") {
+    States.setRelation(playerId, targetId, "Ally");
+    removeTariffsAgainst(playerId, targetId);
+    removeTariffsAgainst(targetId, playerId);
+  } else if (kind === "paix") {
+    States.setRelation(playerId, targetId, "Friendly");
+  } else {
+    if ((player.diplomacy?.[targetId] ?? "Neutral") === "Neutral")
+      States.setRelation(playerId, targetId, "Friendly");
+    removeTariffsAgainst(playerId, targetId);
+    removeTariffsAgainst(targetId, playerId);
+  }
 
   const save = getOrCreateCampaign();
   if (!treatyExists(kind, playerId, targetId))
