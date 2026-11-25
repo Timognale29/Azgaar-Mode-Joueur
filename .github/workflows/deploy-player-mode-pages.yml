@@ -1,6 +1,9 @@
 name: Deploy Player Mode to GitHub Pages
 
 on:
+  push:
+    branches:
+      - mode-joueur-v2
   workflow_dispatch:
 
 permissions:
@@ -20,7 +23,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
         with:
-          ref: mode-joueur-dev
+          ref: mode-joueur-v2
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
