@@ -122,3 +122,20 @@
   .player-mode-toggle { right: 68px; bottom: 12px; }
   .player-mode-tabs button { font-size: 10px; }
 }
+
+.player-mode-tax-control { display: grid; gap: 5px; padding: 8px 0; border-top: 1px solid #eee8dc; }
+.player-mode-tax-heading { display: flex; justify-content: space-between; gap: 10px; color: #3f4a42; }
+.player-mode-tax-output { color: #263b36; font-size: 12px; font-variant-numeric: tabular-nums; }
+.player-mode-tax-control input[type="range"] { width: 100%; accent-color: #526e5b; cursor: pointer; }
+.player-mode-apply {
+  justify-self: start;
+  margin-top: 5px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  color: #fffdf8;
+  background: #263b36;
+  font: 700 11px system-ui, sans-serif;
+  cursor: pointer;
+}
+.player-mode-apply:disabled { opacity: .65; cursor: default; }
