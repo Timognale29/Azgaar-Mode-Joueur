@@ -246,3 +246,41 @@
   background: #6b8b70;
   transition: width .2s ease;
 }
+
+
+/* V2: campaign-first layout */
+.player-mode-panel {
+  top: 10px;
+  right: 10px;
+  bottom: 10px;
+  width: min(560px, calc(100vw - 20px));
+  max-height: calc(100vh - 20px);
+  border-radius: 10px;
+  border-color: #9b8a68;
+  box-shadow: 0 16px 48px rgb(12 20 16 / 38%);
+}
+.player-mode-controls[hidden] { display: none !important; }
+.player-mode-start {
+  min-height: 260px;
+  align-content: start;
+  padding: 16px;
+  border: 1px solid #d7c7a5;
+  border-radius: 10px;
+  background: linear-gradient(145deg, #fffdf8, #eee7d7);
+}
+.player-mode-start .player-mode-section-heading h3 { font-size: 22px; }
+.player-mode-start .player-mode-primary { min-height: 42px; font-size: 13px; }
+.player-mode-city-actions {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.player-mode-city-actions .player-mode-action { white-space: nowrap; }
+@media (max-width: 520px) {
+  .player-mode-panel {
+    inset: 6px;
+    width: auto;
+    max-height: none;
+  }
+}
