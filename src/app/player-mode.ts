@@ -24,7 +24,9 @@ import {
   setBudget,
   setEmbargo,
   setPlayerState,
-  setTaxes
+  setTaxes,
+  upgradeCity,
+  urbanUpgradeCostFor
 } from "./player-mode-engine";
 import * as Connection from "@/services/assistant/provider/connection";
 import type { Message } from "@/services/assistant/provider/providers";
@@ -256,6 +258,14 @@ function renderCities(state: State): void {
     const cityActions = el("div", "player-mode-city-actions");
     cityActions.append(
       el("span", "player-mode-list-value", number(burg.population) + " hab. · " + (market ? "Marché" : "Sans marché")),
+      makeButton("Améliorer · " + money(urbanUpgradeCostFor(burg.i, state.i)), () => {
+        try {
+          const cost = upgradeCity(burg.i, state.i);
+          Layers.drawAll();
+          render();
+          content?.prepend(el("p", "player-mode-success", "Projet urbain lancé. Coût : " + money(cost) + " ; entretien : 2 par tour."));
+        } catch (error) { showActionError(error); }
+      }),
       makeButton("Ouvrir l'éditeur Azgaar", () => Controllers.BurgEditor.open(burg.i))
     );
     item.append(name, cityActions);
