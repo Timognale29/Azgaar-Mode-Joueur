@@ -373,7 +373,7 @@ function showStateActions(stateId: number): void {
 }
 
 function lockNativeBurgEditor(): void {
-  const ids = ["burgName", "burgGroup", "burgType", "burgCulture", "burgPopulation", "burgTags", "burgRemove", "burgRelocate", "burgLock", "burgEditEmblem", "burgSetPreviewLink"];
+  const ids = ["burgName", "burgGroup", "burgType", "burgCulture", "burgPopulation", "burgTags", "burgRemove", "burgRelocate", "burgLock", "burgEditEmblem", "burgSetPreviewLink", "burgStyleShow", "burgStyleHide", "burgEditLabelStyle", "burgEditGroupStyle", "burgEditLabel", "burglLegend"];
   for (const id of ids) {
     const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | HTMLButtonElement | null;
     if (control) control.disabled = true;
