@@ -1,6 +1,5 @@
 import type {} from "@/model/globals";
 import "./player-mode.css";
-import { Controllers } from "@/controllers";
 import { Layers } from "@/renderers/layers";
 import type { Burg } from "@/model/political/burgs-generator";
 import type { State } from "@/model/political/states-generator";
@@ -8,6 +7,10 @@ import {
   advanceTurn,
   buildMarket,
   buildRoad,
+  buildCityFortification,
+  buildCityCitadel,
+  fortificationCostFor,
+  citadelCostFor,
   exportCampaignData,
   formatMoney,
   getAttitude,
@@ -257,8 +260,8 @@ function renderCities(state: State): void {
     const market = globalThis.pack.markets.some(entry => entry.centerBurgId === burg.i);
     const cityActions = el("div", "player-mode-city-actions");
     cityActions.append(
-      el("span", "player-mode-list-value", number(burg.population) + " hab. · " + (market ? "Marché" : "Sans marché")),
-      makeButton("Améliorer · " + money(urbanUpgradeCostFor(burg.i, state.i)), () => {
+      el("span", "player-mode-list-value", number(burg.population * options.map.units.population.scale * options.map.units.population.urbanization.rate) + " hab. · " + (market ? "Marché" : "Sans marché") + (burg.walls ? " · Remparts" : "") + (burg.citadel ? " · Citadelle" : "")),
+      makeButton("Développer · " + money(urbanUpgradeCostFor(burg.i, state.i)), () => {
         try {
           const cost = upgradeCity(burg.i, state.i);
           Layers.drawAll();
@@ -266,7 +269,22 @@ function renderCities(state: State): void {
           content?.prepend(el("p", "player-mode-success", "Projet urbain lancé. Coût : " + money(cost) + " ; entretien : 2 par tour."));
         } catch (error) { showActionError(error); }
       }),
-      makeButton("Ouvrir l'éditeur Azgaar", () => Controllers.BurgEditor.open(burg.i))
+      makeButton(burg.walls ? "Remparts construits" : "Construire des remparts · " + money(fortificationCostFor(burg.i, state.i)), () => {
+        try {
+          const cost = buildCityFortification(burg.i, state.i);
+          Layers.draw("burgIcons", "labels");
+          render();
+          content?.prepend(el("p", "player-mode-success", "Fortifications achevées. " + money(cost) + " débités ; entretien : 3 par tour."));
+        } catch (error) { showActionError(error); }
+      }),
+      makeButton(burg.citadel ? "Citadelle construite" : "Construire une citadelle · " + money(citadelCostFor(burg.i, state.i)), () => {
+        try {
+          const cost = buildCityCitadel(burg.i, state.i);
+          Layers.draw("burgIcons", "labels");
+          render();
+          content?.prepend(el("p", "player-mode-success", "Citadelle achevée. " + money(cost) + " débités ; entretien : 5 par tour."));
+        } catch (error) { showActionError(error); }
+      })
     );
     item.append(name, cityActions);
     list.append(item);
@@ -584,7 +602,7 @@ function renderConstruction(state: State): void {
       : project.kind === "road"
         ? globalThis.pack.routes.find(item => item.i === project.entityId)?.name ?? ("Route " + project.entityId)
         : globalThis.pack.burgs[project.entityId]?.name ?? ("Ville " + project.entityId);
-    const projectLabel = project.kind === "market" ? "Marché · " : project.kind === "road" ? "Route · " : "Amélioration urbaine · ";
+    const projectLabel = project.kind === "market" ? "Marché · " : project.kind === "road" ? "Route · " : project.kind === "fortification" ? "Remparts · " : project.kind === "citadel" ? "Citadelle · " : "Amélioration urbaine · ";
     projectList.append(row(projectLabel + entityName, money(project.upkeep) + " / tour"));
   }
   const playerRoutes = globalThis.pack.routes.filter(route => {
