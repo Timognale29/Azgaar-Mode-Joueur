@@ -8,11 +8,15 @@ import {
   advanceTurn,
   buildMarket,
   buildRoad,
+  exportCampaignData,
   formatMoney,
   getAttitude,
   getCampaign,
   getFunds,
+  getProjectsForState,
   getStateEconomy,
+  getWarsForState,
+  importCampaignData,
   negotiate,
   marketCostFor,
   roadCostFor,
@@ -21,6 +25,9 @@ import {
   setPlayerState,
   setTaxes
 } from "./player-mode-engine";
+import * as Connection from "@/services/assistant/provider/connection";
+import type { Message } from "@/services/assistant/provider/providers";
+import { askPlayerAI } from "./player-mode-ai";
 
 type PlayerTab = "overview" | "cities" | "finance" | "commerce" | "diplomacy" | "construction" | "assistant";
 type SliderControl = { wrapper: HTMLElement; input: HTMLInputElement };
@@ -34,6 +41,9 @@ let tabButtons: HTMLButtonElement[] = [];
 let assistantInput: HTMLTextAreaElement | null = null;
 let assistantTranscript: HTMLElement | null = null;
 let assistantMessages: {role: "user" | "assistant"; text: string}[] = [];
+let assistantHistory: Message[] = [];
+let assistantHistoryStateId: number | null = null;
+let assistantBusy = false;
 
 const tabs: {id: PlayerTab; label: string}[] = [
   {id: "overview", label: "État"},
@@ -182,8 +192,44 @@ function renderOverview(state: State): void {
   else for (const entry of entries) lastEvents.append(row("Tour " + entry.turn, entry.text));
   wrapper.append(lastEvents);
 
-  const note = el("p", "player-mode-note", "Le trésor de campagne est enregistré dans le navigateur. Les fonds de départ sont une dotation de lancement ; les travaux, marchés, routes et missions diplomatiques sont ensuite débités de ce trésor.");
+  const note = el("p", "player-mode-note", "Le trésor de campagne est enregistré dans le navigateur. Les fonds de départ sont une dotation de lancement ; les travaux, marchés, routes, entretiens et missions diplomatiques sont ensuite débités de ce trésor.");
   wrapper.append(note);
+
+  const saveCard = el("div", "player-mode-card");
+  saveCard.append(sectionTitle("Sauvegarde de campagne", "Export et import du tour, des trésors, des traités, des guerres et des entretiens."));
+  const saveActions = el("div", "player-mode-action-grid");
+  const download = makeButton("Exporter la campagne", () => {
+    const data = exportCampaignData();
+    const blob = new Blob([data], {type: "application/json"});
+    const url = URL.createObjectURL(blob);
+    const link = el("a");
+    link.href = url;
+    const fileName = (state.name || "azgaar").toLowerCase().replace(/[^a-z0-9_-]+/g, "-");
+    link.download = "azgaar-" + fileName + "-campagne.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  });
+  const fileInput = el("input");
+  fileInput.type = "file";
+  fileInput.accept = ".json,application/json";
+  fileInput.hidden = true;
+  const upload = makeButton("Importer une campagne", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const selectedFile = fileInput.files?.[0];
+    if (!selectedFile) return;
+    try {
+      importCampaignData(await selectedFile.text());
+      render();
+      content?.prepend(el("p", "player-mode-success", "Campagne importée. La carte correspondante doit toujours être chargée séparément avec son fichier .map."));
+    } catch (error) {
+      showActionError(error);
+    } finally {
+      fileInput.value = "";
+    }
+  });
+  saveActions.append(download, upload);
+  saveCard.append(saveActions, fileInput);
+  wrapper.append(saveCard);
   setContent(wrapper);
 }
 
@@ -347,7 +393,7 @@ function runDiplomaticAction(state: State, targetId: number, kind: "alliance" | 
     const target = getStates().find(item => item.i === targetId);
     const label = kind === "alliance" ? "alliance" : kind === "commerce" ? "traité commercial" : kind === "paix" ? "paix" : "mobilisation";
     const message = kind === "guerre"
-      ? "Conflit déclaré contre " + (target?.name ?? "cet État") + ". Le conflit est représenté par les relations diplomatiques."
+      ? "Conflit engagé contre " + (target?.name ?? "cet État") + ". Le score stratégique, les budgets, le ravitaillement et l'entretien seront calculés à chaque tour."
       : result.accepted
         ? (target?.name ?? "L'État") + " accepte le " + label + "."
         : (target?.name ?? "L'État") + " refuse le " + label + ".";
@@ -415,7 +461,32 @@ function renderDiplomacy(state: State): void {
     }
   }
   wrapper.append(treatyCard);
-  wrapper.append(el("p", "player-mode-note", "Les conflits sont actuellement abstraits : déclaration, relations, embargo et paix sont gérés, mais pas encore les campagnes militaires et les batailles."));
+
+  const wars = getWarsForState(state.i).filter(war => war.status === "active");
+  const warCard = el("div", "player-mode-card");
+  warCard.append(sectionTitle("Conflits en cours", "Les affrontements sont résolus par un score stratégique abstrait."));
+  if (!wars.length) warCard.append(el("p", "player-mode-empty", "Aucun conflit actif pour cet État."));
+  else for (const war of wars) {
+    const ownAdvantage = war.attacker === state.i ? war.score : -war.score;
+    const otherId = war.attacker === state.i ? war.defender : war.attacker;
+    const other = getStates().find(item => item.i === otherId);
+    const label = ownAdvantage > 5 ? "Avantage de votre État" : ownAdvantage < -5 ? "Avantage adverse" : "Situation équilibrée";
+    const totalPopulation = (state.rural ?? 0) + (state.urban ?? 0);
+    const upkeep = Math.min(180, Math.round(35 + Math.sqrt(Math.max(0, totalPopulation)) * 0.8));
+    const item = el("div", "player-mode-war");
+    item.append(el("strong", "", other?.name ?? "État inconnu"));
+    item.append(el("span", "player-mode-muted", label + " · Score " + number(ownAdvantage) + " · tour " + war.turns));
+    const track = el("div", "player-mode-war-track");
+    const fill = el("div", "player-mode-war-fill");
+    fill.style.width = Math.max(0, Math.min(100, 50 + ownAdvantage / 2)) + "%";
+    track.append(fill);
+    item.append(track);
+    item.append(el("p", "player-mode-muted", "Entretien estimé de votre armée : " + money(upkeep) + " par tour."));
+    item.append(makeButton("Proposer la paix · 65", () => runDiplomaticAction(state, otherId, "paix")));
+    warCard.append(item);
+  }
+  wrapper.append(warCard);
+  wrapper.append(el("p", "player-mode-note", "Une guerre dure au maximum 12 tours avant une trêve automatique, sauf victoire stratégique plus tôt. Le vainqueur peut recevoir des réparations plafonnées ; aucun territoire n'est annexé automatiquement."));
   setContent(wrapper);
 }
 
@@ -482,8 +553,18 @@ function renderConstruction(state: State): void {
   if (!destinations.length) roadCard.append(el("p", "player-mode-muted", "Il faut au moins deux villes dans cet État pour construire une route."));
   wrapper.append(roadCard);
 
+  const projects = getProjectsForState(state.i);
   const projectList = el("div", "player-mode-card");
-  projectList.append(sectionTitle("Projets déjà cartographiés"));
+  const upkeepTotal = projects.reduce((total, project) => total + project.upkeep, 0);
+  projectList.append(sectionTitle("Entretien des infrastructures", "Ces frais sont débités automatiquement à chaque tour."));
+  projectList.append(row("Entretien par tour", money(upkeepTotal)));
+  if (!projects.length) projectList.append(el("p", "player-mode-empty", "Aucun chantier financé par le mode joueur."));
+  else for (const project of projects) {
+    const entityName = project.kind === "market"
+      ? globalThis.pack.markets.find(item => item.i === project.entityId)?.name ?? ("Marché " + project.entityId)
+      : globalThis.pack.routes.find(item => item.i === project.entityId)?.name ?? ("Route " + project.entityId);
+    projectList.append(row((project.kind === "market" ? "Marché · " : "Route · ") + entityName, money(project.upkeep) + " / tour"));
+  }
   const playerRoutes = globalThis.pack.routes.filter(route => {
     const routeCells = route.cells ?? [];
     return routeCells.some(cellId => globalThis.pack.cells.state[cellId] === state.i);
@@ -566,7 +647,7 @@ function executePlayerCommand(raw: string, state: State): string {
   if ((match = command.match(/^(?:declare|declares)\s+(?:la\s+)?guerre\s+(?:a|contre)\s+(.+)$/))) {
     const target = findNamedState(match[1], state.i);
     const result = negotiate(state.i, target.i, "guerre");
-    return "Conflit déclaré contre " + target.name + ". Mobilisation diplomatique : " + money(result.cost) + ". Les combats ne sont pas encore simulés.";
+    return "Conflit engagé contre " + target.name + ". Mobilisation initiale : " + money(result.cost) + ". Les coûts d'entretien et le score stratégique évolueront à chaque tour.";
   }
   if ((match = command.match(/^(?:negocie\s+)?(?:la\s+)?paix\s+(?:avec|a)\s+(.+)$/))) {
     const target = findNamedState(match[1], state.i);
@@ -588,11 +669,20 @@ function executePlayerCommand(raw: string, state: State): string {
 }
 
 function renderAssistant(state: State): void {
+  if (assistantHistoryStateId !== state.i) {
+    assistantHistory = [];
+    assistantHistoryStateId = state.i;
+  }
   const wrapper = el("div", "player-mode-page");
-  wrapper.append(sectionTitle("Assistant de gouvernement", "Écris un ordre en français : les commandes reconnues déclenchent directement les actions autorisées."));
+  const connected = Connection.isConnected();
+  wrapper.append(sectionTitle("Assistant de gouvernement", connected
+    ? "L'IA connectée peut analyser ta demande et utiliser les outils du jeu."
+    : "Mode local actif : les commandes reconnues déclenchent directement les actions autorisées."));
   assistantTranscript = el("div", "player-mode-chat");
   if (!assistantMessages.length) {
-    appendMessage(assistantTranscript, "assistant", "Bonjour. Je peux gérer les tours, les taxes, les budgets, construire des marchés et des routes payantes, ou lancer des négociations. Écris « aide » pour connaître les commandes.");
+    appendMessage(assistantTranscript, "assistant", connected
+      ? "Bonjour. Je peux consulter la situation, proposer une politique et exécuter les ordres autorisés. Les actions payantes sont vérifiées avant leur réalisation."
+      : "Bonjour. Je peux gérer les tours, les taxes, les budgets, construire des marchés et des routes payantes, ou lancer des négociations. Écris « aide » pour connaître les commandes.");
   } else {
     for (const message of assistantMessages.slice(-12)) appendMessage(assistantTranscript, message.role, message.text);
   }
@@ -600,26 +690,46 @@ function renderAssistant(state: State): void {
 
   assistantInput = el("textarea", "player-mode-chat-input");
   assistantInput.rows = 3;
-  assistantInput.placeholder = "Ex. : construis un marché à " + (getStateBurgs(state.i)[0]?.name ?? "ma capitale") + "…";
-  const send = makeButton("Exécuter l'ordre", () => {
+  assistantInput.placeholder = "Ex. : " + (connected ? "analyse mes finances et propose une amélioration…" : "construis un marché à " + (getStateBurgs(state.i)[0]?.name ?? "ma capitale") + "…");
+  const send = makeButton(connected ? "Envoyer à l'IA" : "Exécuter l'ordre local", () => {
     const text = assistantInput?.value.trim();
-    if (!text) return;
+    if (!text || assistantBusy) return;
     assistantMessages.push({role: "user", text});
-    try {
-      const response = executePlayerCommand(text, state);
-      assistantMessages.push({role: "assistant", text: response});
-    } catch (error) {
-      assistantMessages.push({role: "assistant", text: error instanceof Error ? error.message : String(error)});
+    assistantInput!.value = "";
+    if (!Connection.isConnected()) {
+      try {
+        assistantMessages.push({role: "assistant", text: executePlayerCommand(text, state)});
+      } catch (error) {
+        assistantMessages.push({role: "assistant", text: error instanceof Error ? error.message : String(error)});
+      }
+      render();
+      activeTab = "assistant";
+      for (const button of tabButtons) button.classList.toggle("active", button.dataset.tab === "assistant");
+      return;
     }
+
+    assistantBusy = true;
     render();
     activeTab = "assistant";
-    for (const button of tabButtons) button.classList.toggle("active", button.dataset.tab === "assistant");
+    void askPlayerAI(text, state.i, assistantHistory).then(answer => {
+      assistantMessages.push({role: "assistant", text: answer});
+    }).catch(error => {
+      assistantMessages.push({role: "assistant", text: error instanceof Error ? error.message : String(error)});
+    }).finally(() => {
+      assistantBusy = false;
+      render();
+      activeTab = "assistant";
+      for (const button of tabButtons) button.classList.toggle("active", button.dataset.tab === "assistant");
+    });
   }, "player-mode-primary");
+  send.disabled = assistantBusy;
   wrapper.append(assistantInput, send);
+  if (assistantBusy) wrapper.append(el("p", "player-mode-note", "L'assistant analyse la demande et exécute uniquement les outils autorisés…"));
 
-  wrapper.append(el("p", "player-mode-note", "Cette première version utilise un interpréteur local à commandes autorisées : elle modifie les données réelles sans envoyer ta carte à un service externe. Elle n'est pas encore un modèle conversationnel génératif."));
-  wrapper.append(makeButton("Ouvrir l'assistant IA intégré d'Azgaar", () => Controllers.Assistant.toggle()));
-  setContent(wrapper);
+  wrapper.append(el("p", "player-mode-note", connected
+    ? "L'IA utilise le fournisseur et le modèle configurés dans l'assistant d'Azgaar. Les fournisseurs externes peuvent facturer les requêtes ; la clé reste dans le stockage local de ce navigateur. Une connexion ChatGPT Plus n'est pas un jeton API."
+    : "Mode local sans appel réseau : les commandes inconnues ne changent jamais la carte. Pour activer le langage naturel avec une IA générative, configure un fournisseur dans Azgaar Assistant ; les appels à un fournisseur externe peuvent être payants."));
+  wrapper.append(makeButton("Ouvrir les réglages / l'assistant IA d'Azgaar", () => Controllers.Assistant.toggle()));
 }
 
 function render(): void {
@@ -704,6 +814,8 @@ export const PlayerMode = {
     selector.addEventListener("change", () => {
       selectedStateId = Number(selector?.value) || null;
       if (selectedStateId !== null) setPlayerState(selectedStateId);
+      assistantHistory = [];
+      assistantHistoryStateId = selectedStateId;
       render();
     });
     selectLabel.append(selector);
