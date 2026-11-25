@@ -773,6 +773,9 @@ function renderAssistant(state: State): void {
   wrapper.append(makeButton("Ouvrir les réglages / l'assistant IA d'Azgaar", () => Controllers.Assistant.toggle()));
 }
 
+function openNativePlayerMenu(): void {
+  document.getElementById("toolsTab")?.click();
+}
 function applyCampaignLock(active: boolean): void {
   document.body.classList.toggle("player-mode-campaign", active);
   options.map.viewOnly = active;
@@ -819,6 +822,7 @@ function render(): void {
       setPlayerState(id);
       selectedStateId = id;
       applyCampaignLock(true);
+      openNativePlayerMenu();
       const controls = panel?.querySelector<HTMLElement>(".player-mode-controls");
       if (controls) controls.hidden = true;
       render();
@@ -923,6 +927,7 @@ export const PlayerMode = {
       const savedStateId = getPlayerStateId();
       selectedStateId = availableStates.some(candidate => candidate.i === savedStateId) ? savedStateId : null;
       applyCampaignLock(selectedStateId !== null);
+      if (selectedStateId !== null) openNativePlayerMenu();
       render();
     });
 
