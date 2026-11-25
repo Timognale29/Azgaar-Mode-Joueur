@@ -1,4 +1,5 @@
 import "@/model/globals";
+import "./player-mode.css";
 import type { Burg } from "@/model/political/burgs-generator";
 import type { State } from "@/model/political/states-generator";
 
@@ -106,7 +107,7 @@ function renderOverview(state: State): void {
   info.append(sectionTitle("Informations politiques"));
   info.append(
     row("Capitale", capital?.name ?? "Non renseignée"),
-    row("Culture principale", globalThis.pack?.cultures?.[state.culture]?.name ?? "Non renseignée"),
+    row("Culture principale", (state.culture === undefined ? undefined : globalThis.pack.cultures[state.culture]?.name) ?? "Non renseignée"),
     row("Villes et bourgs", number(burgs.length)),
     row("Pays voisins", number(state.neighbors?.length ?? 0))
   );
