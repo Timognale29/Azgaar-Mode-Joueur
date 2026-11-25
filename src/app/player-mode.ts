@@ -256,6 +256,7 @@ function handleMapClick(event: Event): void {
   if (!campaignActive || !(event instanceof CustomEvent)) return;
   const mouseEvent = event.detail as MouseEvent;
   if (!(mouseEvent instanceof MouseEvent)) return;
+  if (mouseEvent.target instanceof Element && mouseEvent.target.closest("#legend, #scaleBar")) return;
   const viewbox = document.getElementById("viewbox");
   if (!viewbox) return;
   const point = getPointer(mouseEvent, viewbox);
@@ -537,8 +538,9 @@ function renderCommerce(state: State): void {
 
 function stateSelect(excludedId: number, className = "player-mode-select"): HTMLSelectElement {
   const select = el("select", className);
-  const states = getStates().filter(state => state.i !== excludedId);
+  const states = getStates().filter(state => state.i !== excludedId).sort((a, b) => a.i === selectedMapStateId ? -1 : b.i === selectedMapStateId ? 1 : 0);
   for (const state of states) select.append(new Option(state.fullName ?? state.name, String(state.i)));
+  if (selectedMapStateId !== null && states.some(state => state.i === selectedMapStateId)) select.value = String(selectedMapStateId);
   return select;
 }
 function runDiplomaticAction(state: State, targetId: number, kind: "alliance" | "commerce" | "paix" | "guerre"): void {
@@ -613,7 +615,7 @@ function renderDiplomacy(state: State): void {
       const otherId = treaty.a === state.i ? treaty.b : treaty.a;
       const otherName = getStates().find(item => item.i === otherId)?.name ?? "État inconnu";
       const name = treaty.kind === "alliance" ? "Alliance" : treaty.kind === "commerce" ? "Accord commercial" : "Traité de paix";
-      treatyCard.append(row(name, otherName + " · signé au tour " + treaty.signedTurn));
+      treatyCard.append(row(name, otherName + " · signé au jour " + treaty.signedTurn));
     }
   }
   wrapper.append(treatyCard);
@@ -637,12 +639,12 @@ function renderDiplomacy(state: State): void {
     fill.style.width = Math.max(0, Math.min(100, 50 + ownAdvantage / 2)) + "%";
     track.append(fill);
     item.append(track);
-    item.append(el("p", "player-mode-muted", "Entretien estimé de votre armée : " + money(upkeep) + " par tour."));
+    item.append(el("p", "player-mode-muted", "Entretien estimé de votre armée : " + money(upkeep) + " par jour."));
     item.append(makeButton("Proposer la paix · 65", () => runDiplomaticAction(state, otherId, "paix")));
     warCard.append(item);
   }
   wrapper.append(warCard);
-  wrapper.append(el("p", "player-mode-note", "Une guerre dure au maximum 12 tours avant une trêve automatique, sauf victoire stratégique plus tôt. Le vainqueur peut recevoir des réparations plafonnées ; aucun territoire n'est annexé automatiquement."));
+  wrapper.append(el("p", "player-mode-note", "Une guerre dure au maximum 12 jours avant une trêve automatique, sauf victoire stratégique plus tôt. Le vainqueur peut recevoir des réparations plafonnées ; aucun territoire n'est annexé automatiquement."));
   setContent(wrapper);
 }
 
@@ -712,8 +714,8 @@ function renderConstruction(state: State): void {
   const projects = getProjectsForState(state.i);
   const projectList = el("div", "player-mode-card");
   const upkeepTotal = projects.reduce((total, project) => total + project.upkeep, 0);
-  projectList.append(sectionTitle("Entretien des infrastructures", "Ces frais sont débités automatiquement à chaque tour."));
-  projectList.append(row("Entretien par tour", money(upkeepTotal)));
+  projectList.append(sectionTitle("Entretien des infrastructures", "Ces frais sont débités automatiquement chaque jour."));
+  projectList.append(row("Entretien par jour", money(upkeepTotal)));
   if (!projects.length) projectList.append(el("p", "player-mode-empty", "Aucun chantier financé par le mode joueur."));
   else for (const project of projects) {
     const entityName = project.kind === "market"
@@ -722,7 +724,7 @@ function renderConstruction(state: State): void {
         ? globalThis.pack.routes.find(item => item.i === project.entityId)?.name ?? ("Route " + project.entityId)
         : globalThis.pack.burgs[project.entityId]?.name ?? ("Ville " + project.entityId);
     const projectLabel = project.kind === "market" ? "Marché · " : project.kind === "road" ? "Route · " : project.kind === "fortification" ? "Remparts · " : project.kind === "citadel" ? "Citadelle · " : "Amélioration urbaine · ";
-    projectList.append(row(projectLabel + entityName, money(project.upkeep) + " / tour"));
+    projectList.append(row(projectLabel + entityName, money(project.upkeep) + " / jour"));
   }
   const playerRoutes = globalThis.pack.routes.filter(route => {
     const routeCells = route.cells ?? [];
@@ -757,9 +759,16 @@ function executePlayerCommand(raw: string, state: State): string {
   const command = normalizeText(raw).replace(/[.!?]+$/g, "").trim();
   let match: RegExpMatchArray | null;
 
-  if (/^(fin du tour|tour suivant|termine le tour|terminer le tour|avance un tour|passe le tour)$/.test(command)) {
-    const result = advanceTurn(state.i);
-    return "Tour " + (result.turn - 1) + " terminé. " + (result.changes.slice(0, 5).join(" ; ") || "Les données économiques ont été recalculées.");
+  if (/^(pause|pause le temps|arrete le temps)$/.test(command)) {
+    gamePaused = true;
+    updateClockDisplay();
+    return "Le temps est en pause.";
+  }
+  if (/^(reprends|reprendre|continue|relance le temps)$/.test(command)) {
+    gamePaused = false;
+    lastSimulationTick = Date.now();
+    updateClockDisplay();
+    return "Le temps reprend à la vitesse ×" + gameSpeed + ".";
   }
   if ((match = command.match(/^(?:construis|construire|batis|batir)\s+(?:un\s+)?marche\s+(?:a|dans)\s+(.+)$/))) {
     const burg = findNamedBurg(match[1], state.i);
@@ -822,7 +831,7 @@ function executePlayerCommand(raw: string, state: State): string {
     return "Le trésor de campagne contient " + money(getFunds(state.i)) + ". Le dernier solde économique journalier était de " + money(state.economy.treasury) + ".";
   }
   if (/^(aide|commandes|que peux tu faire)$/.test(command)) {
-    return "Commandes reconnues : « construis un marché à [ville] », « construis une route entre [ville] et [ville] », « taxe sur les ventes à 10 % », « budget infrastructure à 25 % », « alliance avec [État] », « traité commercial avec [État] », « déclare la guerre à [État] », « paix avec [État] », « embargo contre [État] », « fin du tour ». Les chantiers et missions sont débités du trésor.";
+    return "Commandes reconnues : « construis un marché à [ville] », « construis une route entre [ville] et [ville] », « taxe sur les ventes à 10 % », « budget infrastructure à 25 % », « alliance avec [État] », « traité commercial avec [État] », « déclare la guerre à [État] », « paix avec [État] », « embargo contre [État] », « pause », « reprends ». Les chantiers et missions sont débités du trésor.";
   }
   return "Je n'ai pas reconnu cet ordre. Écris « aide » pour voir les commandes disponibles. Les ordres inconnus ne modifient jamais la carte.";
 }
