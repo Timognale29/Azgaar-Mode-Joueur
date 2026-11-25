@@ -1,49 +1,38 @@
-# Mode Joueur V2 — cahier de conception
+# Mode Joueur V2 — interaction native sur la carte
 
-La V2 doit être une vraie couche de jeu sur la carte Azgaar, pas un tableau de bord posé à côté.
+Le mode campagne ne remplace pas les menus d'Azgaar. La carte reste l'interface principale et les actions s'ouvrent dans les éditeurs natifs de l'application.
 
-## Déjà intégré dans cette branche
+## Commandes globales
+- Un petit HUD affiche l'horloge, la pause, la vitesse et le retour Sandbox.
+- Le temps avance en continu ; l'économie et la démographie sont recalculées par jour de jeu.
+- Le choix du pays est explicite et reste lié à la campagne.
+- Le retour Sandbox conserve la sauvegarde et réactive les outils libres d'Azgaar.
 
-- La campagne commence par un écran de sélection du pays.
-- Le pays choisi est enregistré dans la campagne et ne peut plus être changé depuis le sélecteur de l'interface.
-- La sélection n'est pas automatiquement remplacée par le premier pays de la carte après un chargement.
-- Depuis la liste des villes, le bouton « Ouvrir l'éditeur Azgaar » ouvre le véritable `BurgEditor` natif d'Azgaar.
-- Le panneau du mode joueur est agrandi et adapté à une campagne.
+## Clic sur une ville
+- Le clic ouvre le véritable `BurgEditor` d'Azgaar.
+- Les champs qui permettent de tricher gratuitement (nom, population, culture, bâtiments, suppression, déplacement administratif) sont verrouillés en campagne.
+- Les décisions de jeu sont ajoutées à l'intérieur de cet éditeur : marché, développement urbain, remparts, citadelle et consultation de l'économie locale.
+- Chaque chantier vérifie le propriétaire et débite le trésor avant de modifier la carte.
 
-## Fonctionnalités V2 à construire ensuite
+## Clic sur un territoire
+- Le clic ouvre une fenêtre native Azgaar avec les caractéristiques de l'État.
+- Pour l'État joueur : fiscalité, budget public et forces armées.
+- Pour les autres États : alliance, commerce, paix, guerre et embargo.
+- La compatibilité diplomatique s'appuie sur la culture, l'ascendance, le type culturel, la religion majoritaire, le régime, les voisins et les échanges.
 
-### Carte et interface de campagne
-- La carte reste la surface de jeu principale.
-- Un menu de campagne dédié organise les ordres par domaine : État, villes, économie, routes, diplomatie et forces territoriales.
-- Les outils de création de monde (régénération, modification libre des États, édition globale des frontières et outils de génération) sont masqués pendant une campagne. Les outils de consultation restent accessibles.
-- Les modifications autorisées passent par les ordres du joueur, avec contrôle du pays propriétaire, du prix et des conséquences.
+## Armées
+- Les symboles de régiment sur la carte ouvrent le véritable `RegimentEditor`.
+- Les compositions libres sont verrouillées en campagne ; les recrutements passent par le registre militaire Azgaar, coûtent de l'argent et changent le vrai régiment.
+- Une nouvelle unité est levée à la capitale, puis peut être recrutée.
+- Un ordre de déplacement se termine par un clic sur la carte. Le moteur vérifie le propriétaire du territoire, le type terrestre/naval, la distance et le coût.
+- Les déplacements libres par glisser-déposer restent disponibles en Sandbox.
+- L'attaque utilise l'écran de bataille natif d'Azgaar.
 
-### Villes
-- Réutiliser le vrai éditeur natif Azgaar pour les données de ville.
-- Les actions qui améliorent une ville doivent être des projets payants, avec coût initial, délai et entretien éventuel.
-- La population des villes doit évoluer à chaque tour en fonction de la prospérité, des ressources, des infrastructures et des événements. Ne pas permettre une croissance gratuite par simple édition.
-- Une modification administrative d'une ville doit être vérifiée et débitée avant d'être appliquée.
+## Règle de campagne
+Les décisions sont vérifiées dans le moteur, et pas uniquement masquées dans l'interface : propriétaire de la ville, trésor disponible, composition, territoire accessible, type d'unité et coût de déplacement.
 
-### Routes et cellules
-- Mode « Tracer une route » : cliquer sur une cellule de départ, puis sur chaque cellule voisine du tracé, puis sur la cellule d'arrivée.
-- Afficher le tracé provisoire et son coût estimé avant confirmation.
-- Refuser les cellules maritimes impraticables et les territoires étrangers sans accord.
-- À la confirmation, créer la vraie route Azgaar à partir de la séquence de cellules et débiter le trésor.
-
-### Diplomatie
-- Choisir un pays sur la carte ou dans la liste des États.
-- Afficher ses frontières, son attitude, les traités et les intérêts économiques.
-- Les propositions ont un coût et une réponse de l'IA ; elles ne modifient pas la carte avant acceptation.
-
-### Forces territoriales
-- Gestion abstraite de présence et de contrôle de cellules, de budgets, d'entretien et d'approvisionnement à l'échelle du jeu.
-- Les ordres passent par une sélection de cellules sur la carte et restent soumis aux frontières, aux coûts et aux règles de campagne.
-- Pas de simulation de tactiques réelles ni de détails d'armes : la résolution reste une mécanique stratégique abstraite.
-
-## Règle anti-triche
-
-Une campagne garde un identifiant de pays joueur immuable. Les actions sont validées dans le moteur, pas seulement dans l'interface : propriété des cellules, fonds disponibles, coûts, limites de déplacement abstraites et état des traités. Masquer un bouton ne suffit pas à sécuriser une action.
-
-## Critère d'acceptation
-
-Une V2 n'est pas considérée terminée tant qu'un joueur ne peut pas démarrer une carte, choisir son pays une seule fois, tracer une route en cliquant les cellules réelles, payer une amélioration urbaine, faire évoluer la population au fil des tours et conduire les relations avec les autres États depuis la carte.
+## À développer ensuite
+- Trajets militaires en plusieurs étapes avec ravitaillement, fatigue et délai.
+- Recrutement limité par la population mobilisable et la capacité économique.
+- Actions propres aux régimes : décrets théocratiques, privilèges claniques, institutions républicaines, etc.
+- Événements locaux déclenchés par la culture, la religion, les ressources et les bâtiments de la ville.
