@@ -106,8 +106,8 @@ function setupMap(): void {
   memory.clear();
   const states = [
     {i: 0, name: "Terres neutres", economy: finance(), diplomacy: []},
-    {i: 1, name: "Aster", fullName: "Royaume d'Aster", culture: 1, rural: 100, urban: 100, area: 30, alert: 2, neighbors: [2], diplomacy: [], economy: finance()},
-    {i: 2, name: "Boreal", fullName: "Duché de Boréal", culture: 2, rural: 100, urban: 100, area: 30, alert: 2, neighbors: [1], diplomacy: [], economy: finance()}
+    {i: 1, name: "Aster", fullName: "Royaume d'Aster", capital: 1, culture: 1, rural: 100, urban: 100, area: 30, alert: 2, neighbors: [2], diplomacy: [], economy: finance()},
+    {i: 2, name: "Boreal", fullName: "Duché de Boréal", capital: 2, culture: 2, rural: 100, urban: 100, area: 30, alert: 2, neighbors: [1], diplomacy: [], economy: finance()}
   ];
   const burgs = [
     {i: 0},
