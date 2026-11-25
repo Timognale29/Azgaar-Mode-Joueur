@@ -382,3 +382,107 @@
 .player-mode-campaign #toolsContent::before {
   content: "Campagne active — les outils de modification libre sont verrouillés.";
 }
+
+
+/* V2.1 — embed campaign controls in the native Azgaar Tools tab instead of a floating panel */
+.player-mode-toggle { display: none !important; }
+.player-mode-panel.player-mode-inline {
+  position: relative;
+  inset: auto;
+  z-index: auto;
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  overflow: visible;
+  margin: 0 0 12px;
+  border: 0;
+  border-bottom: 1px solid var(--separator-color, #aaa);
+  border-radius: 0;
+  box-shadow: none;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+}
+.player-mode-panel.player-mode-inline[hidden] { display: none !important; }
+.player-mode-inline .player-mode-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  padding: 10px 8px;
+  border-radius: 5px;
+}
+.player-mode-inline .player-mode-heading h2 { font-size: 16px; }
+.player-mode-inline .player-mode-heading p { font-size: 11px; }
+.player-mode-inline .player-mode-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.player-mode-clock {
+  padding: 6px 8px;
+  color: #f8f2e4;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.player-mode-inline .player-mode-header-turn,
+.player-mode-inline .player-mode-sandbox {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 10px;
+}
+.player-mode-inline .player-mode-sandbox {
+  border: 1px solid #b18b42;
+  border-radius: 5px;
+  color: #fff7e7;
+  background: #765d30;
+  font-weight: 700;
+  cursor: pointer;
+}
+.player-mode-inline .player-mode-tabs {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 7px 4px;
+}
+.player-mode-inline .player-mode-tabs button {
+  min-height: 31px;
+  font-size: 10px;
+}
+.player-mode-inline .player-mode-content {
+  max-height: none;
+  overflow: visible;
+  padding: 9px 6px 13px;
+}
+.player-mode-inline .player-mode-page { gap: 8px; }
+.player-mode-inline .player-mode-card,
+.player-mode-inline .player-mode-stat { padding: 9px; }
+.player-mode-inline .player-mode-country-preview {
+  display: grid;
+  gap: 4px;
+  padding: 9px;
+  border: 1px solid #ded7c8;
+  border-radius: 7px;
+  background: #fffdf8;
+  color: #444b43;
+  font-size: 11px;
+}
+.player-mode-list-item.is-map-selected {
+  margin: 3px -5px;
+  padding: 8px 5px;
+  border: 1px solid #b18b42;
+  border-radius: 7px;
+  background: #f5eedc;
+}
+.player-mode-map-selection { border-left: 4px solid #b18b42; }
+
+/* In a campaign, world-generation and free-edit controls are unavailable.
+   Returning to Sandbox removes this class and restores Azgaar's original tools. */
+body.player-mode-campaign #toolsContent #regenerateFeature,
+body.player-mode-campaign #toolsContent #addFeature,
+body.player-mode-campaign #toolsContent button[id^="edit"],
+body.player-mode-campaign #toolsContent #openSubmapTool,
+body.player-mode-campaign #toolsContent #openTransformTool,
+body.player-mode-campaign #toolsContent #openWrapTool {
+  display: none !important;
+}
