@@ -56,11 +56,6 @@ function money(value: number | undefined | null): string {
     : new Intl.NumberFormat("fr-FR", {maximumFractionDigits: 2}).format(value);
 }
 
-function percent(value: number | undefined): string {
-  if (value === undefined || !Number.isFinite(value)) return "—";
-  return `${number(value * 100)} %`;
-}
-
 function statCard(label: string, value: string, detail = ""): HTMLElement {
   const card = el("div", "player-mode-stat");
   card.append(el("span", "player-mode-stat-label", label));
