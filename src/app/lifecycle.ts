@@ -39,11 +39,11 @@ export async function boot(): Promise<void> {
   stashCallbackToken(); // before anything reads the URL: the OAuth fragment is not a load parameter
   registerServiceWorker();
   initShell();
-  PlayerMode.init();
   declareDefaultFonts();
 
   Options.restore();
   await Options.restoreIcons(); // kept in IndexedDB, and needed before the first map draws
+  PlayerMode.init();
   adoptLegacyIconSlots(options.map.military.units); // the unit types a browser kept from before v1.154.0
   syncOptionInputs();
   restoreUi();
