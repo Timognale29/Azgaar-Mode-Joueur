@@ -1,483 +1,163 @@
-/* Azgaar Mode Joueur — first integrated dashboard */
-.player-mode-toggle {
+/* Compact campaign HUD; city, country and army actions live in Azgaar's native dialogs. */
+.player-campaign-hud {
   position: fixed;
-  right: 68px;
-  bottom: 14px;
-  z-index: 120;
-  border: 1px solid #c8b98e;
-  border-radius: 999px;
-  padding: 9px 15px;
-  color: #f7f0df;
-  background: #263b36;
-  box-shadow: 0 3px 12px rgb(0 0 0 / 24%);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.2;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-}
-.player-mode-toggle:hover { background: #35554b; }
-.player-mode-toggle:focus-visible,
-.player-mode-panel button:focus-visible,
-.player-mode-panel select:focus-visible {
-  outline: 2px solid #d5a84c;
-  outline-offset: 2px;
-}
-.player-mode-panel {
-  position: fixed;
-  z-index: 119;
-  top: 14px;
-  right: 14px;
-  bottom: 66px;
+  z-index: 1200;
+  top: 8px;
+  right: 10px;
   display: flex;
-  flex-direction: column;
-  width: min(430px, calc(100vw - 28px));
-  max-height: calc(100vh - 80px);
-  overflow: hidden;
-  color: #252a26;
-  background: #f4f0e6;
-  border: 1px solid #c9c0ad;
-  border-radius: 12px;
-  box-shadow: 0 12px 38px rgb(0 0 0 / 32%);
-  font: 13px/1.45 system-ui, sans-serif;
-}
-.player-mode-panel[hidden] { display: none; }
-.player-mode-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 18px 18px 14px;
-  color: #f8f2e4;
-  background: #263b36;
-}
-.player-mode-heading h2 { margin: 2px 0 3px; font-size: 22px; line-height: 1.2; }
-.player-mode-heading p { margin: 0; color: #d8dfd7; font-size: 12px; }
-.player-mode-eyebrow { color: #d8bd79; font-size: 10px; font-weight: 800; letter-spacing: .13em; }
-.player-mode-close {
-  align-self: flex-start;
-  width: 30px;
-  height: 30px;
-  border: 1px solid rgb(255 255 255 / 28%);
-  border-radius: 50%;
-  color: white;
-  background: transparent;
-  font-size: 22px;
-  cursor: pointer;
-}
-.player-mode-controls { padding: 12px 16px 8px; }
-.player-mode-controls label { display: grid; gap: 5px; color: #55594f; font-size: 11px; font-weight: 700; }
-.player-mode-select {
-  width: 100%;
-  min-height: 36px;
-  padding: 6px 9px;
-  border: 1px solid #c8c1b2;
-  border-radius: 6px;
-  color: #242a25;
-  background: #fffdf8;
-  font: inherit;
-}
-.player-mode-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 0 12px 10px; }
-.player-mode-tabs button {
-  padding: 8px 3px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  color: #5d625b;
-  background: transparent;
-  font: 600 11px/1.2 system-ui, sans-serif;
-  cursor: pointer;
-}
-.player-mode-tabs button.active { border-bottom-color: #b18b42; color: #263b36; background: #e9e3d5; }
-.player-mode-content { min-height: 0; overflow: auto; padding: 0 16px 18px; }
-.player-mode-page { display: grid; gap: 12px; }
-.player-mode-section-heading h3 { margin: 0; color: #263b36; font-size: 17px; }
-.player-mode-section-heading p { margin: 3px 0 0; color: #74766e; font-size: 11px; }
-.player-mode-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.player-mode-stat, .player-mode-card {
-  padding: 12px;
-  border: 1px solid #ded7c8;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100vw - 20px);
+  padding: 6px 8px;
+  border: 1px solid #b7aa8a;
   border-radius: 8px;
-  background: #fffdf8;
+  color: #f8f2e4;
+  background: rgb(38 59 54 / 95%);
+  box-shadow: 0 3px 12px rgb(0 0 0 / 22%);
+  font: 12px/1.2 system-ui, sans-serif;
 }
-.player-mode-stat { display: grid; gap: 3px; }
-.player-mode-stat-label { color: #77786f; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
-.player-mode-stat-value { color: #263b36; font-size: 20px; line-height: 1.2; }
-.player-mode-stat-detail { color: #85847b; font-size: 10px; }
-.player-mode-card { display: grid; gap: 7px; }
-.player-mode-card .player-mode-section-heading h3 { font-size: 13px; }
-.player-mode-data-row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid #eee8dc; }
-.player-mode-data-row:last-child { border-bottom: 0; }
-.player-mode-data-row span { color: #77786f; }
-.player-mode-data-row strong { text-align: right; }
-.player-mode-list { display: grid; border-top: 1px solid #ded7c8; }
-.player-mode-list-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 2px; border-bottom: 1px solid #ded7c8; }
-.player-mode-list-main { display: grid; min-width: 0; gap: 1px; }
-.player-mode-list-main strong { overflow: hidden; color: #263b36; text-overflow: ellipsis; white-space: nowrap; }
-.player-mode-muted, .player-mode-list-value { color: #77786f; font-size: 10px; }
-.player-mode-list-value { flex: 0 0 auto; text-align: right; }
-.player-mode-note, .player-mode-empty { margin: 0; padding: 10px 11px; border-radius: 7px; color: #62675f; background: #eae5d9; font-size: 11px; }
-.player-mode-empty { padding: 18px; text-align: center; }
-@media (max-width: 520px) {
-  .player-mode-panel { top: 8px; right: 8px; bottom: 62px; width: calc(100vw - 16px); max-height: calc(100vh - 70px); }
-  .player-mode-toggle { right: 68px; bottom: 12px; }
-  .player-mode-tabs button { font-size: 10px; }
+.player-campaign-clock {
+  min-width: 94px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
-
-.player-mode-tax-control { display: grid; gap: 5px; padding: 8px 0; border-top: 1px solid #eee8dc; }
-.player-mode-tax-heading { display: flex; justify-content: space-between; gap: 10px; color: #3f4a42; }
-.player-mode-tax-output { color: #263b36; font-size: 12px; font-variant-numeric: tabular-nums; }
-.player-mode-tax-control input[type="range"] { width: 100%; accent-color: #526e5b; cursor: pointer; }
-.player-mode-apply {
-  justify-self: start;
-  margin-top: 5px;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 6px;
+.player-campaign-status {
+  padding: 0 5px;
+  color: #d8dfd7;
+  font-size: 10px;
+}
+.player-campaign-hud-button {
+  min-width: 29px;
+  min-height: 27px;
+  padding: 4px 7px;
+  border: 1px solid rgb(255 255 255 / 25%);
+  border-radius: 5px;
   color: #fffdf8;
-  background: #263b36;
+  background: #3b5b50;
   font: 700 11px system-ui, sans-serif;
   cursor: pointer;
 }
-.player-mode-apply:disabled { opacity: .65; cursor: default; }
+.player-campaign-mode-button {
+  padding-inline: 10px;
+  border-color: #c8ad6d;
+  color: #fff4d8;
+  background: #765d30;
+}
+.player-campaign-hud-button:hover { filter: brightness(1.12); }
 
-.player-mode-header-actions { display: flex; flex: none; align-items: flex-start; gap: 6px; }
-.player-mode-header-turn {
-  padding: 7px 9px;
-  border: 1px solid rgb(255 255 255 / 25%);
-  border-radius: 6px;
-  color: #f8f2e4;
-  background: #3b5b50;
-  font: 700 10px system-ui, sans-serif;
-  cursor: pointer;
-}
-.player-mode-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-.player-mode-tabs button { min-height: 34px; }
-.player-mode-turn-card {
+.player-campaign-dialog-body {
   display: grid;
-  gap: 8px;
-  padding: 13px;
-  border: 1px solid #c9c0ad;
-  border-left: 4px solid #b18b42;
-  border-radius: 8px;
-  background: #fffdf8;
+  gap: 9px;
+  max-height: min(68vh, 600px);
+  overflow: auto;
+  padding: 3px 2px 8px;
+  font: 12px/1.4 system-ui, sans-serif;
 }
-.player-mode-turn-card p { margin: 0; color: #74766e; font-size: 11px; }
-.player-mode-action,
-.player-mode-primary,
-.player-mode-danger {
-  padding: 8px 11px;
-  border: 1px solid #c9c0ad;
+.player-campaign-dialog-body > p { margin: 0; }
+.player-campaign-section {
+  display: grid;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid var(--separator-color, #d4cbb9);
   border-radius: 6px;
-  color: #263b36;
-  background: #f4f0e6;
-  font: 700 11px/1.35 system-ui, sans-serif;
-  cursor: pointer;
+  background: color-mix(in srgb, var(--bg-main, #fff) 93%, #d8d0bd);
 }
-.player-mode-action:hover { background: #e9e3d5; }
-.player-mode-primary { border-color: #263b36; color: #fffdf8; background: #263b36; }
-.player-mode-primary:hover { background: #35554b; }
-.player-mode-danger { border-color: #8f3f35; color: #8f3f35; background: #fff8f5; }
-.player-mode-action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
-.player-mode-success {
+.player-campaign-section h3,
+.player-campaign-actions h3 {
   margin: 0;
-  padding: 9px 11px;
-  border-left: 3px solid #4e8260;
-  border-radius: 4px;
-  color: #31533b;
-  background: #e9f1e8;
+  color: var(--dark-solid, #263b36);
+  font-size: 13px;
+}
+.player-campaign-muted {
+  margin: 0;
+  color: var(--text-muted, #73766f);
   font-size: 11px;
 }
-.player-mode-error {
-  margin: 0 0 8px;
-  padding: 9px 11px;
-  border-left: 3px solid #a64c40;
-  border-radius: 4px;
-  color: #7a302a;
-  background: #f7e8e3;
-  font-size: 11px;
+.player-campaign-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
 }
-.player-mode-chat { display: grid; gap: 8px; max-height: 300px; overflow: auto; }
-.player-mode-chat-message {
-  max-width: 92%;
-  padding: 9px 11px;
-  border: 1px solid #ded7c8;
-  border-radius: 9px;
-  background: #fffdf8;
-}
-.player-mode-chat-message.user { justify-self: end; background: #e7ece5; }
-.player-mode-chat-role { color: #6d756a; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
-.player-mode-chat-message p { margin: 4px 0 0; white-space: pre-wrap; }
-.player-mode-chat-input {
+.player-campaign-row span { color: var(--text-muted, #74766e); }
+.player-campaign-row strong { text-align: right; }
+.player-campaign-select,
+.player-campaign-input {
   box-sizing: border-box;
   width: 100%;
-  min-height: 72px;
-  padding: 9px 10px;
-  border: 1px solid #c8c1b2;
-  border-radius: 7px;
-  color: #242a25;
-  background: #fffdf8;
-  font: 12px/1.4 system-ui, sans-serif;
-  resize: vertical;
-}
-@media (max-width: 520px) {
-  .player-mode-header { padding: 14px 12px 12px; }
-  .player-mode-heading h2 { font-size: 19px; }
-  .player-mode-header-turn { max-width: 76px; }
-  .player-mode-action-grid { grid-template-columns: 1fr; }
-  .player-mode-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-}
-
-.player-mode-war {
-  display: grid;
-  gap: 6px;
-  padding: 10px 0;
-  border-bottom: 1px solid #ded7c8;
-}
-.player-mode-war:last-child { border-bottom: 0; }
-.player-mode-war-track {
-  height: 9px;
-  overflow: hidden;
-  border-radius: 99px;
-  background: linear-gradient(90deg, #d7b3a8 0 50%, #d8dfd7 50% 100%);
-}
-.player-mode-war-fill {
-  height: 100%;
-  border-right: 2px solid #263b36;
-  background: #6b8b70;
-  transition: width .2s ease;
-}
-
-
-/* V2: campaign-first layout */
-.player-mode-panel {
-  top: 10px;
-  right: 10px;
-  bottom: 10px;
-  width: min(560px, calc(100vw - 20px));
-  max-height: calc(100vh - 20px);
-  border-radius: 10px;
-  border-color: #9b8a68;
-  box-shadow: 0 16px 48px rgb(12 20 16 / 38%);
-}
-.player-mode-controls[hidden] { display: none !important; }
-.player-mode-start {
-  min-height: 260px;
-  align-content: start;
-  padding: 16px;
-  border: 1px solid #d7c7a5;
-  border-radius: 10px;
-  background: linear-gradient(145deg, #fffdf8, #eee7d7);
-}
-.player-mode-start .player-mode-section-heading h3 { font-size: 22px; }
-.player-mode-start .player-mode-primary { min-height: 42px; font-size: 13px; }
-.player-mode-city-actions {
-  display: grid;
-  justify-items: end;
-  gap: 6px;
-  flex: 0 0 auto;
-}
-.player-mode-city-actions .player-mode-action { white-space: nowrap; }
-@media (max-width: 520px) {
-  .player-mode-panel {
-    inset: 6px;
-    width: auto;
-    max-height: none;
-  }
-}
-
-/* V2 strategy command centre */
-.player-mode-panel {
-  width: min(680px, calc(100vw - 24px));
-  top: 12px;
-  right: 12px;
-  bottom: 12px;
-  background: #f3efe4;
-  border: 1px solid #a99a78;
-  border-radius: 12px;
-}
-.player-mode-header { align-items: center; padding: 16px 18px; }
-.player-mode-heading h2 { font-size: 24px; letter-spacing: -.025em; }
-.player-mode-tabs {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 2px;
-  padding: 7px 12px 10px;
-  background: #e8e2d5;
-  border-bottom: 1px solid #d4cbb9;
-}
-.player-mode-tabs button {
-  min-width: 0;
-  min-height: 40px;
-  padding: 6px 3px;
-  border-radius: 6px;
-  font-size: 10px;
-}
-.player-mode-tabs button.active { border: 0; color: #fffdf8; background: #334b40; }
-.player-mode-content { padding: 14px 18px 22px; }
-.player-mode-stat-value { font-size: 22px; font-variant-numeric: tabular-nums; }
-.player-mode-card { padding: 14px; border-radius: 9px; box-shadow: 0 1px 2px rgb(40 35 25 / 5%); }
-.player-mode-city-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-items: stretch; width: min(360px, 58%); }
-.player-mode-city-actions .player-mode-action { white-space: normal; min-height: 34px; }
-.player-mode-list-item { align-items: flex-start; }
-.player-mode-primary { min-height: 38px; }
-@media (max-width: 680px) {
-  .player-mode-panel { inset: 6px; width: auto; }
-  .player-mode-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .player-mode-city-actions { width: 100%; grid-template-columns: 1fr; }
-  .player-mode-list-item { flex-direction: column; }
-}
-
-/* A campaign locks the sandbox editing palette, while ordinary map navigation stays available */
-.player-mode-campaign #toolsContent {
-  position: relative;
-  opacity: .48;
-  pointer-events: none;
-  user-select: none;
-}
-.player-mode-campaign #toolsContent::before {
-  content: "Mode campagne actif — les outils de modification libre sont verrouillés.";
-  display: block;
-  margin: 0 0 10px;
-  padding: 10px 12px;
-  border: 1px solid #c9b98f;
-  border-radius: 7px;
-  color: #334b40;
-  background: #f2ead7;
-  font-size: 11px;
-  font-weight: 700;
-}
-.player-mode-campaign #regenerate { display: none !important; }
-.player-mode-campaign #viewbox { cursor: grab; }
-
-/* The campaign lives inside Azgaar's own Tools menu, not in a separate floating window */
-#toolsContent > .player-mode-toggle {
-  position: static;
-  display: block;
-  width: 100%;
-  margin: 8px 0;
-  border-radius: 7px;
-  text-align: center;
-}
-#toolsContent > .player-mode-panel {
-  position: static;
-  display: flex;
-  width: 100%;
-  max-width: none;
-  max-height: min(72vh, 760px);
-  margin: 8px 0 12px;
-  border-radius: 8px;
-  box-shadow: none;
-}
-#toolsContent > .player-mode-panel[hidden] { display: none; }
-.player-mode-campaign #toolsContent > :not(.player-mode-toggle):not(.player-mode-panel) {
-  opacity: .38;
-  pointer-events: none;
-  user-select: none;
-}
-.player-mode-campaign #toolsContent > .player-mode-toggle,
-.player-mode-campaign #toolsContent > .player-mode-panel {
-  opacity: 1;
-  pointer-events: auto;
-}
-.player-mode-campaign #toolsContent::before {
-  content: "Campagne active — les outils de modification libre sont verrouillés.";
-}
-
-
-/* V2.1 — embed campaign controls in the native Azgaar Tools tab instead of a floating panel */
-.player-mode-toggle { display: none !important; }
-.player-mode-panel.player-mode-inline {
-  position: relative;
-  inset: auto;
-  z-index: auto;
-  display: flex;
-  flex-direction: column;
-  width: auto;
-  max-width: none;
-  max-height: none;
-  overflow: visible;
-  margin: 0 0 12px;
-  border: 0;
-  border-bottom: 1px solid var(--separator-color, #aaa);
-  border-radius: 0;
-  box-shadow: none;
-  color: inherit;
-  background: transparent;
+  min-height: 30px;
+  padding: 4px 7px;
+  border: 1px solid var(--separator-color, #c8c1b2);
+  border-radius: 4px;
+  color: var(--text, #242a25);
+  background: var(--bg-main, #fffdf8);
   font: inherit;
 }
-.player-mode-panel.player-mode-inline[hidden] { display: none !important; }
-.player-mode-inline .player-mode-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
-  padding: 10px 8px;
+.player-campaign-button,
+.player-campaign-primary,
+.player-campaign-danger {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 9px;
+  border: 1px solid var(--separator-color, #c9c0ad);
   border-radius: 5px;
-}
-.player-mode-inline .player-mode-heading h2 { font-size: 16px; }
-.player-mode-inline .player-mode-heading p { font-size: 11px; }
-.player-mode-inline .player-mode-header-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.player-mode-clock {
-  padding: 6px 8px;
-  color: #f8f2e4;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.player-mode-inline .player-mode-header-turn,
-.player-mode-inline .player-mode-sandbox {
-  min-height: 30px;
-  padding: 5px 8px;
-  font-size: 10px;
-}
-.player-mode-inline .player-mode-sandbox {
-  border: 1px solid #b18b42;
-  border-radius: 5px;
-  color: #fff7e7;
-  background: #765d30;
-  font-weight: 700;
+  color: var(--text, #263b36);
+  background: var(--bg-main, #f4f0e6);
+  font: 600 11px/1.3 system-ui, sans-serif;
+  text-align: left;
   cursor: pointer;
 }
-.player-mode-inline .player-mode-tabs {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 7px 4px;
+.player-campaign-button:hover,
+.player-campaign-primary:hover { filter: brightness(.96); }
+.player-campaign-primary {
+  border-color: #334b40;
+  color: white;
+  background: #334b40;
 }
-.player-mode-inline .player-mode-tabs button {
-  min-height: 31px;
-  font-size: 10px;
+.player-campaign-danger {
+  border-color: #9b4e43;
+  color: #8f3f35;
+  background: #fff8f5;
 }
-.player-mode-inline .player-mode-content {
-  max-height: none;
-  overflow: visible;
-  padding: 9px 6px 13px;
+.player-campaign-button:disabled,
+.player-campaign-primary:disabled {
+  opacity: .5;
+  cursor: default;
 }
-.player-mode-inline .player-mode-page { gap: 8px; }
-.player-mode-inline .player-mode-card,
-.player-mode-inline .player-mode-stat { padding: 9px; }
-.player-mode-inline .player-mode-country-preview {
+.player-campaign-army-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.player-campaign-army-row .player-campaign-button { width: auto; min-width: 72px; }
+.player-campaign-preview {
   display: grid;
-  gap: 4px;
-  padding: 9px;
-  border: 1px solid #ded7c8;
-  border-radius: 7px;
-  background: #fffdf8;
-  color: #444b43;
-  font-size: 11px;
+  gap: 5px;
+  padding: 8px;
+  border: 1px solid var(--separator-color, #d4cbb9);
+  border-radius: 5px;
 }
-.player-mode-list-item.is-map-selected {
-  margin: 3px -5px;
-  padding: 8px 5px;
-  border: 1px solid #b18b42;
-  border-radius: 7px;
-  background: #f5eedc;
+.player-campaign-error { color: #a23e32; font-weight: 700; }
+.player-campaign-actions {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 3px;
+  padding: 10px;
+  border: 1px solid var(--separator-color, #c9c0ad);
+  border-left: 4px solid #b18b42;
+  border-radius: 6px;
+  background: var(--bg-main, #fffdf8);
+  color: var(--text, #242a25);
+  font: 12px/1.35 system-ui, sans-serif;
 }
-.player-mode-map-selection { border-left: 4px solid #b18b42; }
-
-/* In a campaign, world-generation and free-edit controls are unavailable.
-   Returning to Sandbox removes this class and restores Azgaar's original tools. */
+.player-campaign-actions .player-campaign-section { background: transparent; }
+.player-campaign-disabled {
+  opacity: .45 !important;
+  pointer-events: none !important;
+}
 body.player-mode-campaign #toolsContent #regenerateFeature,
 body.player-mode-campaign #toolsContent #addFeature,
 body.player-mode-campaign #toolsContent button[id^="edit"],
@@ -485,4 +165,31 @@ body.player-mode-campaign #toolsContent #openSubmapTool,
 body.player-mode-campaign #toolsContent #openTransformTool,
 body.player-mode-campaign #toolsContent #openWrapTool {
   display: none !important;
+}
+
+/* Keep the original Azgaar editors usable and scrollable on smaller screens. */
+#burgBody,
+#regimentBody {
+  max-height: calc(100vh - 145px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+#playerCountryPicker .dialog-message,
+#playerStateDecisions .dialog-message,
+#playerCampaignNotice .dialog-message {
+  max-height: min(70vh, 640px);
+  overflow-y: auto;
+}
+@media (max-width: 620px) {
+  .player-campaign-hud {
+    top: 5px;
+    right: 5px;
+    gap: 3px;
+    padding: 4px;
+  }
+  .player-campaign-clock { min-width: 78px; }
+  .player-campaign-status { display: none; }
+  .player-campaign-hud-button { min-width: 26px; padding: 4px 5px; }
+  #burgBody,
+  #regimentBody { max-height: calc(100vh - 110px); }
 }
