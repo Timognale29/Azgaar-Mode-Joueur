@@ -1,4 +1,4 @@
-import "@/model/globals";
+import type {} from "@/model/globals";
 import { Accounts } from "@/model/economy/accounts";
 import { Markets } from "@/model/economy/markets-generator";
 import { Production } from "@/model/economy/production-generator";
