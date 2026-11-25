@@ -1,0 +1,121 @@
+/* Azgaar Mode Joueur — first integrated dashboard */
+.player-mode-toggle {
+  position: fixed;
+  right: 68px;
+  bottom: 14px;
+  z-index: 120;
+  border: 1px solid #c8b98e;
+  border-radius: 999px;
+  padding: 9px 15px;
+  color: #f7f0df;
+  background: #263b36;
+  box-shadow: 0 3px 12px rgb(0 0 0 / 24%);
+  font: 700 12px/1.2 inherit;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.player-mode-toggle:hover { background: #35554b; }
+.player-mode-toggle:focus-visible,
+.player-mode-panel button:focus-visible,
+.player-mode-panel select:focus-visible {
+  outline: 2px solid #d5a84c;
+  outline-offset: 2px;
+}
+.player-mode-panel {
+  position: fixed;
+  z-index: 119;
+  top: 14px;
+  right: 14px;
+  bottom: 66px;
+  display: flex;
+  flex-direction: column;
+  width: min(430px, calc(100vw - 28px));
+  max-height: calc(100vh - 80px);
+  overflow: hidden;
+  color: #252a26;
+  background: #f4f0e6;
+  border: 1px solid #c9c0ad;
+  border-radius: 12px;
+  box-shadow: 0 12px 38px rgb(0 0 0 / 32%);
+  font: 13px/1.45 system-ui, sans-serif;
+}
+.player-mode-panel[hidden] { display: none; }
+.player-mode-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  color: #f8f2e4;
+  background: #263b36;
+}
+.player-mode-heading h2 { margin: 2px 0 3px; font-size: 22px; line-height: 1.2; }
+.player-mode-heading p { margin: 0; color: #d8dfd7; font-size: 12px; }
+.player-mode-eyebrow { color: #d8bd79; font-size: 10px; font-weight: 800; letter-spacing: .13em; }
+.player-mode-close {
+  align-self: flex-start;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgb(255 255 255 / 28%);
+  border-radius: 50%;
+  color: white;
+  background: transparent;
+  font-size: 22px;
+  cursor: pointer;
+}
+.player-mode-controls { padding: 12px 16px 8px; }
+.player-mode-controls label { display: grid; gap: 5px; color: #55594f; font-size: 11px; font-weight: 700; }
+.player-mode-select {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 9px;
+  border: 1px solid #c8c1b2;
+  border-radius: 6px;
+  color: #242a25;
+  background: #fffdf8;
+  font: inherit;
+}
+.player-mode-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 0 12px 10px; }
+.player-mode-tabs button {
+  padding: 8px 3px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #5d625b;
+  background: transparent;
+  font: 600 11px/1.2 system-ui, sans-serif;
+  cursor: pointer;
+}
+.player-mode-tabs button.active { border-bottom-color: #b18b42; color: #263b36; background: #e9e3d5; }
+.player-mode-content { min-height: 0; overflow: auto; padding: 0 16px 18px; }
+.player-mode-page { display: grid; gap: 12px; }
+.player-mode-section-heading h3 { margin: 0; color: #263b36; font-size: 17px; }
+.player-mode-section-heading p { margin: 3px 0 0; color: #74766e; font-size: 11px; }
+.player-mode-stats-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.player-mode-stat, .player-mode-card {
+  padding: 12px;
+  border: 1px solid #ded7c8;
+  border-radius: 8px;
+  background: #fffdf8;
+}
+.player-mode-stat { display: grid; gap: 3px; }
+.player-mode-stat-label { color: #77786f; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.player-mode-stat-value { color: #263b36; font-size: 20px; line-height: 1.2; }
+.player-mode-stat-detail { color: #85847b; font-size: 10px; }
+.player-mode-card { display: grid; gap: 7px; }
+.player-mode-card .player-mode-section-heading h3 { font-size: 13px; }
+.player-mode-data-row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-bottom: 1px solid #eee8dc; }
+.player-mode-data-row:last-child { border-bottom: 0; }
+.player-mode-data-row span { color: #77786f; }
+.player-mode-data-row strong { text-align: right; }
+.player-mode-list { display: grid; border-top: 1px solid #ded7c8; }
+.player-mode-list-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 2px; border-bottom: 1px solid #ded7c8; }
+.player-mode-list-main { display: grid; min-width: 0; gap: 1px; }
+.player-mode-list-main strong { overflow: hidden; color: #263b36; text-overflow: ellipsis; white-space: nowrap; }
+.player-mode-muted, .player-mode-list-value { color: #77786f; font-size: 10px; }
+.player-mode-list-value { flex: 0 0 auto; text-align: right; }
+.player-mode-note, .player-mode-empty { margin: 0; padding: 10px 11px; border-radius: 7px; color: #62675f; background: #eae5d9; font-size: 11px; }
+.player-mode-empty { padding: 18px; text-align: center; }
+@media (max-width: 520px) {
+  .player-mode-panel { top: 8px; right: 8px; bottom: 62px; width: calc(100vw - 16px); max-height: calc(100vh - 70px); }
+  .player-mode-toggle { right: 68px; bottom: 12px; }
+  .player-mode-tabs button { font-size: 10px; }
+}
