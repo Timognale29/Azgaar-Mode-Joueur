@@ -1,4 +1,4 @@
-import "@/model/globals";
+import type {} from "@/model/globals";
 import "./player-mode.css";
 import { Controllers } from "@/controllers";
 import { Layers } from "@/renderers/layers";
