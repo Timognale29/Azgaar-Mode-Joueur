@@ -818,9 +818,13 @@ export function advanceTurn(playerId: number): {turn: number; changes: string[]}
     const prosperity = Accounts.ofState(state.i)?.prosperity ?? 0.5;
     const urbanProjects = save.projects.filter(project => project.kind === "urban_upgrade" && project.entityId === burg.i && project.stateId === state.i).length;
     const growth = clamp(0.001 + (prosperity - 0.5) * 0.012 + urbanProjects * 0.0008, -0.006, 0.012);
-    const {scale, urbanization} = options.map.units.population;
-    const people = population * scale * urbanization.rate;
-    Burgs.setPopulation(burg.i, Math.max(1, Math.round(people * (1 + growth))));
+    const populationUnits = typeof options !== "undefined" ? options.map?.units?.population : undefined;
+    if (populationUnits?.scale && populationUnits.urbanization?.rate) {
+      const people = population * populationUnits.scale * populationUnits.urbanization.rate;
+      Burgs.setPopulation(burg.i, Math.max(1, Math.round(people * (1 + growth))));
+    } else {
+      burg.population = Math.max(1, Math.round(population * (1 + growth)));
+    }
   }
   applyProjectUpkeep();
   save.turn++;
