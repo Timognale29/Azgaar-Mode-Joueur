@@ -140,6 +140,7 @@ function createSlider(
 function callAdvanceTurn(stateId: number): void {
   try {
     const result = advanceTurn(stateId);
+    Layers.drawAll();
     render();
     const summary = result.changes.length ? result.changes.slice(0, 5).join(" · ") : "Aucun changement démographique notable.";
     const note = el("p", "player-mode-note", "Tour " + (result.turn - 1) + " terminé. " + summary);
@@ -390,6 +391,7 @@ function stateSelect(excludedId: number, className = "player-mode-select"): HTML
 function runDiplomaticAction(state: State, targetId: number, kind: "alliance" | "commerce" | "paix" | "guerre"): void {
   try {
     const result = negotiate(state.i, targetId, kind);
+    Layers.drawAll();
     const target = getStates().find(item => item.i === targetId);
     const label = kind === "alliance" ? "alliance" : kind === "commerce" ? "traité commercial" : kind === "paix" ? "paix" : "mobilisation";
     const message = kind === "guerre"
@@ -419,6 +421,7 @@ function renderDiplomacy(state: State): void {
     makeButton("Décréter un embargo · 85", () => {
       try {
         setEmbargo(state.i, Number(target.value));
+        Layers.drawAll();
         render();
         content?.prepend(el("p", "player-mode-success", "Embargo enregistré. Il sera appliqué aux échanges du prochain tour."));
       } catch (error) { showActionError(error); }
