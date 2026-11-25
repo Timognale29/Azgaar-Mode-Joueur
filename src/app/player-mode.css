@@ -348,3 +348,37 @@
 }
 .player-mode-campaign #regenerate { display: none !important; }
 .player-mode-campaign #viewbox { cursor: grab; }
+
+/* The campaign lives inside Azgaar's own Tools menu, not in a separate floating window */
+#toolsContent > .player-mode-toggle {
+  position: static;
+  display: block;
+  width: 100%;
+  margin: 8px 0;
+  border-radius: 7px;
+  text-align: center;
+}
+#toolsContent > .player-mode-panel {
+  position: static;
+  display: flex;
+  width: 100%;
+  max-width: none;
+  max-height: min(72vh, 760px);
+  margin: 8px 0 12px;
+  border-radius: 8px;
+  box-shadow: none;
+}
+#toolsContent > .player-mode-panel[hidden] { display: none; }
+.player-mode-campaign #toolsContent > :not(.player-mode-toggle):not(.player-mode-panel) {
+  opacity: .38;
+  pointer-events: none;
+  user-select: none;
+}
+.player-mode-campaign #toolsContent > .player-mode-toggle,
+.player-mode-campaign #toolsContent > .player-mode-panel {
+  opacity: 1;
+  pointer-events: auto;
+}
+.player-mode-campaign #toolsContent::before {
+  content: "Campagne active — les outils de modification libre sont verrouillés.";
+}
