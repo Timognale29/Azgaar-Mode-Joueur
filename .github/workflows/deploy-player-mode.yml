@@ -1,6 +1,9 @@
 name: Deploy Player Mode (manual)
 
 on:
+  push:
+    branches:
+      - mode-joueur-dev
   workflow_dispatch:
 
 permissions:
