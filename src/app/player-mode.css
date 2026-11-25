@@ -326,3 +326,25 @@
   .player-mode-city-actions { width: 100%; grid-template-columns: 1fr; }
   .player-mode-list-item { flex-direction: column; }
 }
+
+/* A campaign locks the sandbox editing palette, while ordinary map navigation stays available */
+.player-mode-campaign #toolsContent {
+  position: relative;
+  opacity: .48;
+  pointer-events: none;
+  user-select: none;
+}
+.player-mode-campaign #toolsContent::before {
+  content: "Mode campagne actif — les outils de modification libre sont verrouillés.";
+  display: block;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border: 1px solid #c9b98f;
+  border-radius: 7px;
+  color: #334b40;
+  background: #f2ead7;
+  font-size: 11px;
+  font-weight: 700;
+}
+.player-mode-campaign #regenerate { display: none !important; }
+.player-mode-campaign #viewbox { cursor: grab; }
