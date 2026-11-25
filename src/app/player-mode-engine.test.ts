@@ -232,7 +232,7 @@ describe("player mode campaign engine", () => {
     expect(mocks.productionRegenerate).toHaveBeenCalledOnce();
     expect(result.turn).toBe(2);
     expect(getFunds(1)).toBe(initialFunds + 120);
-    expect(pack.states[1].rural + pack.states[1].urban).toBeGreaterThan(initialPopulation);
+    expect(pack.states[1]!.rural! + pack.states[1]!.urban!).toBeGreaterThan(initialPopulation);
   });
 
   it("charges initial war mobilization, recurring upkeep and advances the abstract war", () => {
