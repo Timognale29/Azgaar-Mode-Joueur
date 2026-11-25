@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/model/economy/accounts", () => ({
   Accounts: {
-    ofState: (stateId: number) => ({prosperity: 0.6, product: 100, people: 200}),
+    ofState: (_stateId: number) => ({prosperity: 0.6, product: 100, people: 200}),
     getTrade: () => ({exports: 0, imports: 0, partners: new Map()}),
     getOutput: () => []
   }
@@ -108,26 +108,26 @@ function setupMap(): void {
   mocks.addMarket.mockImplementation((burgId: number) => {
     const id = Math.max(0, ...pack.markets.map((market: any) => market.i)) + 1;
     const market = {i: id, centerBurgId: burgId, goods: {}};
-    pack.markets.push(market);
+    pack.markets.push(market as any);
     return market;
   });
   mocks.setTaxes.mockImplementation((stateId: number, salesTax: number, pollTax: number) => {
-    pack.states[stateId].economy.salesTax = salesTax;
-    pack.states[stateId].economy.pollTax = pollTax;
+    pack.states[stateId]!.economy.salesTax = salesTax;
+    pack.states[stateId]!.economy.pollTax = pollTax;
   });
   mocks.setBudget.mockImplementation((stateId: number, budget: Record<string, number>) => {
-    Object.assign(pack.states[stateId].economy.budget, budget);
+    Object.assign(pack.states[stateId]!.economy.budget, budget);
   });
   mocks.setTariffs.mockImplementation((stateId: number, tariffs: unknown[]) => {
-    pack.states[stateId].economy.tariffs = tariffs;
+    pack.states[stateId]!.economy.tariffs = tariffs as any;
   });
   mocks.setRelation.mockImplementation((a: number, b: number, relation: string) => {
-    pack.states[a].diplomacy[b] = relation;
-    pack.states[b].diplomacy[a] = relation;
+    pack.states[a]!.diplomacy![b] = relation;
+    pack.states[b]!.diplomacy![a] = relation;
   });
   mocks.setPopulation.mockImplementation((stateId: number, rural: number, urban: number) => {
-    pack.states[stateId].rural = rural;
-    pack.states[stateId].urban = urban;
+    pack.states[stateId]!.rural = rural;
+    pack.states[stateId]!.urban = urban;
   });
   mocks.productionRegenerate.mockImplementation(() => {
     for (const state of pack.states) if (state.i) state.economy.treasury = 120;
@@ -179,7 +179,7 @@ describe("player mode campaign engine", () => {
   });
 
   it("builds a route only across own or neutral land and charges its length-based cost", () => {
-    pack.burgs.push({i: 3, name: "Seconde", state: 1, cell: 2, population: 80, feature: 1});
+    pack.burgs.push({i: 3, name: "Seconde", state: 1, cell: 2, population: 80, feature: 1} as any);
     pack.cells = {
       i: [0, 1, 2],
       state: [1, 0, 1],
@@ -188,8 +188,8 @@ describe("player mode campaign engine", () => {
       c: [[1], [0, 2], [1]],
       biome: [0, 0, 0],
       routes: [{}, {}, {}]
-    };
-    pack.biomes = [{habitability: 100}];
+    } as any;
+    pack.biomes = [{habitability: 100}] as any;
     const initialFunds = getFunds(1);
 
     const cost = buildRoad(1, 3, 1);
@@ -200,8 +200,8 @@ describe("player mode campaign engine", () => {
     expect(pack.routes[0].cells).toEqual([0, 1, 2]);
     expect(pack.routes[0].tags).toContain("owner:1");
     expect(getCampaign().projects[0]).toMatchObject({kind: "road", stateId: 1, entityId: 1, upkeep: 1.6});
-    expect(pack.cells.routes[0][1]).toBe(1);
-    expect(pack.cells.routes[2][1]).toBe(1);
+    expect(pack.cells.routes[0]?.[1]).toBe(1);
+    expect(pack.cells.routes[2]?.[1]).toBe(1);
   });
 
   it("refuses to route through a foreign state's land without charging", () => {
@@ -225,7 +225,7 @@ describe("player mode campaign engine", () => {
 
   it("runs Azgaar production and advances population and the campaign balance", () => {
     const initialFunds = getFunds(1);
-    const initialPopulation = pack.states[1].rural + pack.states[1].urban;
+    const initialPopulation = pack.states[1]!.rural! + pack.states[1]!.urban!;
 
     const result = advanceTurn(1);
 
@@ -240,7 +240,7 @@ describe("player mode campaign engine", () => {
     const mobilization = negotiate(1, 2, "guerre");
     expect(mobilization.accepted).toBe(true);
     expect(getFunds(1)).toBe(beforeWarFunds - 240);
-    expect(pack.states[1].diplomacy[2]).toBe("Enemy");
+    expect(pack.states[1]!.diplomacy![2]).toBe("Enemy");
     expect(getWarsForState(1)).toHaveLength(1);
 
     const fundsBeforeTurn = getFunds(1);
@@ -257,7 +257,7 @@ describe("player mode campaign engine", () => {
 
     expect(offer.accepted).toBe(true);
     expect(getWarsForState(1)[0].status).toBe("ended");
-    expect(pack.states[1].diplomacy[2]).toBe("Friendly");
+    expect(pack.states[1]!.diplomacy![2]).toBe("Friendly");
     expect(getCampaign().treaties.some(treaty => treaty.kind === "paix" && treaty.status === "active")).toBe(true);
   });
 
