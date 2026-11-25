@@ -847,6 +847,18 @@ function updateAIEconomicPolicies(playerId: number): void {
       salesTax = Math.max(0, salesTax - 0.002);
     }
 
+    const identity = getStateIdentity(state.i);
+    // Government institutions have distinct priorities even when the treasury is healthy.
+    if (identity.governmentFamily === "theocracy") {
+      changes.court = Math.max(changes.court ?? finance.budget.court, 18);
+      if (identity.religionShare < 0.5) changes.administration = Math.max(changes.administration ?? finance.budget.administration, 22);
+    } else if (identity.governmentFamily === "clan") {
+      changes.military = Math.max(changes.military ?? finance.budget.military, 28);
+      changes.administration = Math.min(changes.administration ?? finance.budget.administration, 12);
+    } else if (identity.governmentFamily === "republic") {
+      changes.administration = Math.max(changes.administration ?? finance.budget.administration, 20);
+      changes.infrastructure = Math.max(changes.infrastructure ?? finance.budget.infrastructure, 18);
+    }
     if (atWar) changes.military = Math.min(100, Math.max(changes.military ?? finance.budget.military, finance.budget.military + 3));
     const taxChanged = salesTax !== currentSalesTax || pollTax !== currentPollTax;
     const budgetChanged = Object.entries(changes).some(([key, value]) => value !== finance.budget[key as keyof typeof finance.budget]);
