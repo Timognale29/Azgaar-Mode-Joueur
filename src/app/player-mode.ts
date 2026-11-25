@@ -58,7 +58,6 @@ let campaignActive = false;
 let gamePaused = true;
 let gameSpeed = 1;
 let previousViewOnly = false;
-let selectedCellId: number | null = null;
 let selectedBurgId: number | null = null;
 let selectedMapStateId: number | null = null;
 let simulationTimer: number | null = null;
@@ -262,7 +261,6 @@ function handleMapClick(event: Event): void {
   const point = getPointer(mouseEvent, viewbox);
   const cellId = Pack.findCell(point[0], point[1]);
   if (cellId === undefined) return;
-  selectedCellId = cellId;
   const stateId = Number(globalThis.pack.cells.state?.[cellId] ?? 0);
   const burgId = Number(globalThis.pack.cells.burg?.[cellId] ?? 0);
   selectedMapStateId = stateId || null;
@@ -550,7 +548,7 @@ function runDiplomaticAction(state: State, targetId: number, kind: "alliance" | 
     const target = getStates().find(item => item.i === targetId);
     const label = kind === "alliance" ? "alliance" : kind === "commerce" ? "traité commercial" : kind === "paix" ? "paix" : "mobilisation";
     const message = kind === "guerre"
-      ? "Conflit engagé contre " + (target?.name ?? "cet État") + ". Le score stratégique, les budgets, le ravitaillement et l'entretien seront calculés à chaque tour."
+      ? "Conflit engagé contre " + (target?.name ?? "cet État") + ". Le score stratégique, les budgets, le ravitaillement et l'entretien seront calculés chaque jour."
       : result.accepted
         ? (target?.name ?? "L'État") + " accepte le " + label + "."
         : (target?.name ?? "L'État") + " refuse le " + label + ".";
@@ -578,7 +576,7 @@ function renderDiplomacy(state: State): void {
         setEmbargo(state.i, Number(target.value));
         Layers.drawAll();
         render();
-        content?.prepend(el("p", "player-mode-success", "Embargo enregistré. Il sera appliqué aux échanges du prochain tour."));
+        content?.prepend(el("p", "player-mode-success", "Embargo enregistré. Il sera appliqué aux échanges du prochain cycle quotidien."));
       } catch (error) { showActionError(error); }
     })
   );
@@ -633,7 +631,7 @@ function renderDiplomacy(state: State): void {
     const upkeep = Math.min(180, Math.round(35 + Math.sqrt(Math.max(0, totalPopulation)) * 0.8));
     const item = el("div", "player-mode-war");
     item.append(el("strong", "", other?.name ?? "État inconnu"));
-    item.append(el("span", "player-mode-muted", label + " · Score " + number(ownAdvantage) + " · tour " + war.turns));
+    item.append(el("span", "player-mode-muted", label + " · Score " + number(ownAdvantage) + " · jour " + war.turns));
     const track = el("div", "player-mode-war-track");
     const fill = el("div", "player-mode-war-fill");
     fill.style.width = Math.max(0, Math.min(100, 50 + ownAdvantage / 2)) + "%";
@@ -850,7 +848,7 @@ function renderAssistant(state: State): void {
   if (!assistantMessages.length) {
     appendMessage(assistantTranscript, "assistant", connected
       ? "Bonjour. Je peux consulter la situation, proposer une politique et exécuter les ordres autorisés. Les actions payantes sont vérifiées avant leur réalisation."
-      : "Bonjour. Je peux gérer les tours, les taxes, les budgets, construire des marchés et des routes payantes, ou lancer des négociations. Écris « aide » pour connaître les commandes.");
+      : "Bonjour. Je peux gérer le temps, les taxes, les budgets, construire des marchés et des routes payantes, ou lancer des négociations. Écris « aide » pour connaître les commandes.");
   } else {
     for (const message of assistantMessages.slice(-12)) appendMessage(assistantTranscript, message.role, message.text);
   }
@@ -1067,7 +1065,6 @@ export const PlayerMode = {
       if (!availableStates.length) return;
       const savedStateId = getPlayerStateId();
       selectedStateId = availableStates.some(candidate => candidate.i === savedStateId) ? savedStateId : null;
-      selectedCellId = null;
       selectedBurgId = null;
       selectedMapStateId = null;
       applyCampaignLock(selectedStateId !== null);
