@@ -155,6 +155,7 @@ export function getCampaign(): PlayerCampaign {
 }
 export function setPlayerState(stateId: number): void {
   stateById(stateId);
+  clearStateIdentityCache();
   const save = getOrCreateCampaign();
   save.playerStateId = stateId;
   persist();
@@ -513,6 +514,14 @@ function getGovernmentFamily(state: State): StateIdentitySummary["governmentFami
   return "other";
 }
 
+let identityCachePack: unknown = null;
+const identityCache = new Map<number, StateIdentitySummary>();
+
+export function clearStateIdentityCache(): void {
+  identityCache.clear();
+  identityCachePack = globalThis.pack;
+}
+
 function dominantReligion(stateId: number): {id: number; share: number} {
   const cells = globalThis.pack?.cells;
   if (!cells?.state || !cells.religion) return {id: 0, share: 0};
@@ -535,11 +544,19 @@ function dominantReligion(stateId: number): {id: number; share: number} {
 
 /** The map's own culture, religion and government are used by diplomatic and demographic simulation. */
 export function getStateIdentity(stateId: number): StateIdentitySummary {
+  if (identityCachePack !== globalThis.pack) {
+    identityCache.clear();
+    identityCachePack = globalThis.pack;
+  }
+  const cached = identityCache.get(stateId);
+  if (cached) return cached;
+
   const state = stateById(stateId);
   const culture = globalThis.pack?.cultures?.[state.culture];
   const faith = dominantReligion(stateId);
   const religion = globalThis.pack?.religions?.[faith.id];
-  return {
+  const governmentFamily = getGovernmentFamily(state);
+  const identity: StateIdentitySummary = {
     cultureName: culture?.name ?? "Culture inconnue",
     cultureType: culture?.type ?? "inconnue",
     cultureAncestry: culture?.ancestry ?? "",
@@ -547,8 +564,10 @@ export function getStateIdentity(stateId: number): StateIdentitySummary {
     religionType: religion?.type ?? "",
     religionShare: faith.share,
     government: state.formName ?? state.form ?? state.type ?? "Gouvernement inconnu",
-    governmentFamily: getGovernmentFamily(state)
+    governmentFamily
   };
+  identityCache.set(stateId, identity);
+  return identity;
 }
 
 export function relationScore(subjectId: number, objectId: number): number {
