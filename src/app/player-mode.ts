@@ -822,7 +822,6 @@ function render(): void {
 export const PlayerMode = {
   init(): void {
     if (document.getElementById("playerModeToggle")) return;
-    const states = getStates();
     selectedStateId = getPlayerStateId();
 
     const toggle = el("button", "player-mode-toggle", "⚑ JOUER");
