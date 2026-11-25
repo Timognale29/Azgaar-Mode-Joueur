@@ -26,7 +26,7 @@ export interface PlayerWar {
   endReason?: "victory" | "stalemate" | "peace";
 }
 export interface PlayerProject {
-  kind: "market" | "road";
+  kind: "market" | "road" | "urban_upgrade";
   stateId: number;
   entityId: number;
   upkeep: number;
@@ -204,7 +204,7 @@ export function importCampaignData(raw: string): void {
   const projects = Array.isArray(imported.projects) ? imported.projects.filter(project =>
     project && stateExists(project.stateId) && Number.isInteger(project.entityId) &&
     Number.isFinite(project.upkeep) && project.upkeep >= 0 &&
-    (project.kind === "market" || project.kind === "road")
+    (project.kind === "market" || project.kind === "road" || project.kind === "urban_upgrade")
   ) : [];
   campaign = {
     key: expectedKey,
@@ -307,6 +307,23 @@ export function buildMarket(burgId: number, stateId: number): number {
     persist();
     throw error;
   }
+}
+
+
+const URBAN_UPGRADE_BASE_COST = 180;
+export function urbanUpgradeCostFor(burgId: number, stateId: number): number {
+  const burg = findBurg(burgId, stateId);
+  const level = getOrCreateCampaign().projects.filter(project => project.kind === "urban_upgrade" && project.stateId === stateId && project.entityId === burgId).length;
+  return Math.round(URBAN_UPGRADE_BASE_COST * (1 + level * 0.65) + Math.max(0, burg.population ?? 0) * 0.025);
+}
+export function upgradeCity(burgId: number, stateId: number): number {
+  const burg = findBurg(burgId, stateId);
+  const cost = urbanUpgradeCostFor(burgId, stateId);
+  charge(stateId, cost, "Amélioration urbaine à " + (burg.name ?? "la ville"));
+  getOrCreateCampaign().projects.push({kind: "urban_upgrade", stateId, entityId: burgId, upkeep: 2});
+  persist();
+  addLog("Projet urbain lancé à " + (burg.name ?? "la ville") + " : coût " + formatMoney(cost) + ", entretien 2 par tour.");
+  return cost;
 }
 
 function findLandPath(startCell: number, goalCell: number, stateId: number): {cells: number[]; length: number} {
@@ -744,6 +761,15 @@ export function advanceTurn(playerId: number): {turn: number; changes: string[]}
     if (net < 0) changes.push(`${state.name} : déficit quotidien de ${formatMoney(Math.abs(net))}`);
   }
 
+  // City populations evolve independently, with a modest prosperity-sensitive rate.
+  for (const burg of globalThis.pack.burgs.filter(item => item?.i && !item.removed && item.state)) {
+    const state = livingStates().find(item => item.i === burg.state);
+    if (!state || !(burg.population > 0)) continue;
+    const prosperity = Accounts.ofState(state.i)?.prosperity ?? 0.5;
+    const urbanProjects = save.projects.filter(project => project.kind === "urban_upgrade" && project.entityId === burg.i && project.stateId === state.i).length;
+    const growth = clamp(0.001 + (prosperity - 0.5) * 0.012 + urbanProjects * 0.0008, -0.006, 0.012);
+    burg.population = Math.max(1, Math.round(burg.population * (1 + growth)));
+  }
   applyProjectUpkeep();
   save.turn++;
   updateAIEconomicPolicies(playerId);
