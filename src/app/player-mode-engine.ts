@@ -490,7 +490,7 @@ function finishWar(war: PlayerWar, reason: "victory" | "stalemate", winner?: num
       save.funds[String(loser)] -= reparations;
       save.funds[String(winner)] = (save.funds[String(winner)] ?? 0) + reparations;
     }
-    signPeace(winner, loser, war, "victory", winner);
+    signPeace(winner, loser, war, reason, winner);
     addLog(`Fin du conflit entre ${stateById(attacker).name} et ${stateById(defender).name} : victoire de ${stateById(winner).name}. Réparations : ${formatMoney(reparations)}. Aucun territoire n'est annexé automatiquement.`);
   } else {
     signPeace(attacker, defender, war, "stalemate");
