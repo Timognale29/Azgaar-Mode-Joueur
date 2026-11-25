@@ -297,12 +297,14 @@ function showStateActions(stateId: number): void {
       taxSection.append(line(label + " (%)", ""), input);
     }
     taxSection.append(actionButton("Enregistrer les finances", () => {
-      runAction("Finances", () => {
+      try {
         setTaxes(stateId, Number(sales.value) / 100, Number(poll.value));
         setBudget(stateId, Object.fromEntries([...budgetInputs].map(([key, input]) => [key, Number(input.value)])));
         Dialog.close("playerStateDecisions");
         showStateActions(stateId);
-      });
+      } catch (error) {
+        notify("Finances refusées", error instanceof Error ? error.message : String(error));
+      }
     }, "player-campaign-primary"));
     body.append(taxSection);
 
@@ -354,7 +356,13 @@ function showStateActions(stateId: number): void {
       }, kind === "guerre" ? "player-campaign-danger" : "player-campaign-button"));
     }
     diplomacy.append(actionButton("Décréter un embargo", () => {
-      runAction("Embargo", () => setEmbargo(playerStateId!, stateId), () => showStateActions(stateId));
+      try {
+        setEmbargo(playerStateId!, stateId);
+        Dialog.close("playerStateDecisions");
+        showStateActions(stateId);
+      } catch (error) {
+        notify("Embargo refusé", error instanceof Error ? error.message : String(error));
+      }
     }));
     body.append(diplomacy);
   }
