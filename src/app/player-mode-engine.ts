@@ -13,7 +13,24 @@ export interface PlayerTreaty {
   a: number;
   b: number;
   signedTurn: number;
-  status: "active" | "refused";
+  status: "active" | "refused" | "ended" | "broken";
+}
+export interface PlayerWar {
+  attacker: number;
+  defender: number;
+  startedTurn: number;
+  turns: number;
+  score: number;
+  status: "active" | "ended";
+  winner?: number;
+  endReason?: "victory" | "stalemate" | "peace";
+}
+export interface PlayerProject {
+  kind: "market" | "road";
+  stateId: number;
+  entityId: number;
+  upkeep: number;
+  suspended?: boolean;
 }
 export interface PlayerLogEntry {
   turn: number;
@@ -25,6 +42,8 @@ export interface PlayerCampaign {
   playerStateId: number | null;
   funds: Record<string, number>;
   treaties: PlayerTreaty[];
+  wars: PlayerWar[];
+  projects: PlayerProject[];
   log: PlayerLogEntry[];
 }
 export interface TradeSummary {
@@ -102,8 +121,16 @@ function getOrCreateCampaign(): PlayerCampaign {
     playerStateId: null,
     funds: {},
     treaties: [],
+    wars: [],
+    projects: [],
     log: []
   };
+
+  campaign.treaties ??= [];
+  campaign.wars ??= [];
+  campaign.projects ??= [];
+  campaign.log ??= [];
+  if (!Number.isInteger(campaign.turn) || campaign.turn < 1) campaign.turn = 1;
 
   for (const state of livingStates()) {
     const id = String(state.i);
@@ -135,6 +162,62 @@ export function getFunds(stateId: number): number {
   const save = getOrCreateCampaign();
   return save.funds[String(stateId)] ?? 0;
 }
+export function exportCampaignData(): string {
+  const save = getOrCreateCampaign();
+  return JSON.stringify({format: "azgaar-player-campaign", version: 1, campaign: save}, null, 2);
+}
+export function importCampaignData(raw: string): void {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Fichier de campagne invalide : le JSON ne peut pas être lu.");
+  }
+  if (!parsed || typeof parsed !== "object") throw new Error("Fichier de campagne invalide.");
+  const file = parsed as {format?: unknown; version?: unknown; campaign?: unknown};
+  if (file.format !== "azgaar-player-campaign" || file.version !== 1 || !file.campaign || typeof file.campaign !== "object")
+    throw new Error("Ce fichier n'est pas une sauvegarde compatible du mode joueur.");
+  const imported = file.campaign as PlayerCampaign;
+  const expectedKey = mapKey();
+  if (imported.key !== expectedKey)
+    throw new Error("Cette sauvegarde appartient à une autre carte. Charge la carte correspondante avant de l'importer.");
+  if (!Number.isInteger(imported.turn) || imported.turn < 1 || !imported.funds || typeof imported.funds !== "object")
+    throw new Error("Les données de campagne sont incomplètes.");
+  const validIds = new Set(livingStates().map(state => String(state.i)));
+  const funds: Record<string, number> = {};
+  for (const [id, value] of Object.entries(imported.funds)) {
+    if (!validIds.has(id) || typeof value !== "number" || !Number.isFinite(value) || value < 0)
+      throw new Error("La sauvegarde contient un trésor invalide.");
+    funds[id] = Math.round(value * 100) / 100;
+  }
+  for (const id of validIds) if (funds[id] === undefined) funds[id] = STARTING_GRANT;
+  const stateExists = (id: number) => validIds.has(String(id));
+  const treaties = Array.isArray(imported.treaties) ? imported.treaties.filter(treaty =>
+    treaty && stateExists(treaty.a) && stateExists(treaty.b) && treaty.a !== treaty.b &&
+    ["alliance", "commerce", "paix"].includes(treaty.kind) &&
+    ["active", "refused", "ended", "broken"].includes(treaty.status)
+  ) : [];
+  const wars = Array.isArray(imported.wars) ? imported.wars.filter(war =>
+    war && stateExists(war.attacker) && stateExists(war.defender) && war.attacker !== war.defender &&
+    Number.isFinite(war.score) && Number.isInteger(war.turns) && ["active", "ended"].includes(war.status)
+  ) : [];
+  const projects = Array.isArray(imported.projects) ? imported.projects.filter(project =>
+    project && stateExists(project.stateId) && Number.isInteger(project.entityId) &&
+    Number.isFinite(project.upkeep) && project.upkeep >= 0 &&
+    (project.kind === "market" || project.kind === "road")
+  ) : [];
+  campaign = {
+    key: expectedKey,
+    turn: imported.turn,
+    playerStateId: imported.playerStateId && stateExists(imported.playerStateId) ? imported.playerStateId : null,
+    funds,
+    treaties,
+    wars,
+    projects,
+    log: Array.isArray(imported.log) ? imported.log.filter(entry => entry && Number.isInteger(entry.turn) && typeof entry.text === "string").slice(0, 80) : []
+  };
+  persist();
+}
 export function canAfford(stateId: number, cost: number): boolean {
   return getFunds(stateId) + 1e-6 >= cost;
 }
@@ -158,7 +241,11 @@ export function getStateEconomy(stateId: number): StateEconomySummary {
   const trade = Accounts.getTrade(stateId);
   const goods = options.map.goods ?? [];
   const output = Accounts.getOutput(stateId)
-    .map((value, goodId) => ({goodId, name: goods[goodId]?.name ?? `Ressource ${goodId}`, value: value || 0}))
+    .map((value, goodId) => ({
+      goodId,
+      name: goods.find(good => good?.i === goodId)?.name ?? `Ressource ${goodId}`,
+      value: value || 0
+    }))
     .filter(item => item.value > 0)
     .sort((a, b) => b.value - a.value)
     .slice(0, 8);
@@ -208,7 +295,9 @@ export function buildMarket(burgId: number, stateId: number): number {
   try {
     const market = Markets.addMarket(burgId);
     if (!market) throw new Error("Azgaar n'a pas pu créer ce marché.");
-    addLog(`Le marché de ${burg.name ?? "la ville"} est ouvert. Les échanges seront recalculés au prochain tour.`);
+    getOrCreateCampaign().projects.push({kind: "market", stateId, entityId: market.i, upkeep: 4});
+    persist();
+    addLog(`Le marché de ${burg.name ?? "la ville"} est ouvert. Entretien par tour : 4. Les échanges seront recalculés au prochain tour.`);
     return cost;
   } catch (error) {
     const save = getOrCreateCampaign();
@@ -218,7 +307,7 @@ export function buildMarket(burgId: number, stateId: number): number {
   }
 }
 
-function findLandPath(startCell: number, goalCell: number): {cells: number[]; length: number} {
+function findLandPath(startCell: number, goalCell: number, stateId: number): {cells: number[]; length: number} {
   const cells = globalThis.pack.cells;
   const count = cells.i.length;
   const distance = new Float64Array(count).fill(Infinity);
@@ -237,6 +326,8 @@ function findLandPath(startCell: number, goalCell: number): {cells: number[]; le
     const [x1, y1] = cells.p[current];
     for (const next of cells.c[current]) {
       if (visited[next] || cells.h[next] < 20) continue;
+      const owner = cells.state[next];
+      if (owner && owner !== stateId) continue;
       const habitability = globalThis.pack.biomes[cells.biome[next]]?.habitability ?? 0;
       if (habitability <= 0) continue;
       const [x2, y2] = cells.p[next];
@@ -269,14 +360,14 @@ export function roadCostFor(fromBurgId: number, toBurgId: number, stateId: numbe
   const from = findBurg(fromBurgId, stateId);
   const to = findBurg(toBurgId, stateId);
   if (fromBurgId === toBurgId) throw new Error("Choisis deux villes différentes.");
-  const path = findLandPath(from.cell, to.cell);
+  const path = findLandPath(from.cell, to.cell, stateId);
   return Math.round(ROAD_BASE_COST + path.length * 1.8);
 }
 export function buildRoad(fromBurgId: number, toBurgId: number, stateId: number): number {
   const from = findBurg(fromBurgId, stateId);
   const to = findBurg(toBurgId, stateId);
   if (fromBurgId === toBurgId) throw new Error("Choisis deux villes différentes.");
-  const path = findLandPath(from.cell, to.cell);
+  const path = findLandPath(from.cell, to.cell, stateId);
   const cost = Math.round(ROAD_BASE_COST + path.length * 1.8);
   charge(stateId, cost, `Construction d'une route entre ${from.name ?? from.i} et ${to.name ?? to.i}`);
 
@@ -292,20 +383,39 @@ export function buildRoad(fromBurgId: number, toBurgId: number, stateId: number)
     feature: from.feature ?? to.feature ?? 0,
     points,
     cells: path.cells,
-    length: path.length
+    length: path.length,
+    tags: ["player-mode", `owner:${stateId}`]
   };
-  globalThis.pack.routes.push(route);
 
   const links = globalThis.pack.cells.routes as Record<number, Record<number, number>>;
-  for (let i = 1; i < path.cells.length; i++) {
-    const a = path.cells[i - 1];
-    const b = path.cells[i];
-    links[a] ??= {};
-    links[b] ??= {};
-    if (links[a][b] === undefined) links[a][b] = routeId;
-    if (links[b][a] === undefined) links[b][a] = routeId;
+  const previousLinks = path.cells.slice(1).map((cell, index) => ({
+    a: path.cells[index],
+    b: cell,
+    ab: links[path.cells[index]]?.[cell],
+    ba: links[cell]?.[path.cells[index]]
+  }));
+  try {
+    globalThis.pack.routes.push(route);
+    for (const {a, b} of previousLinks) {
+      links[a] ??= {};
+      links[b] ??= {};
+      if (links[a][b] === undefined) links[a][b] = routeId;
+      if (links[b][a] === undefined) links[b][a] = routeId;
+    }
+    const save = getOrCreateCampaign();
+    save.projects.push({kind: "road", stateId, entityId: routeId, upkeep: Math.max(1, Math.round(path.length * 0.08 * 100) / 100)});
+  } catch (error) {
+    globalThis.pack.routes = globalThis.pack.routes.filter(item => item.i !== routeId);
+    for (const {a, b, ab, ba} of previousLinks) {
+      if (ab === undefined) delete links[a]?.[b];
+      if (ba === undefined) delete links[b]?.[a];
+    }
+    const save = getOrCreateCampaign();
+    save.funds[String(stateId)] += cost;
+    persist();
+    throw error;
   }
-  addLog(`La route entre ${from.name ?? "la première ville"} et ${to.name ?? "la seconde ville"} est construite. Coût : ${formatMoney(cost)}.`);
+  addLog(`La route entre ${from.name ?? "la première ville"} et ${to.name ?? "la seconde ville"} est construite. Entretien par tour : ${formatMoney(Math.max(1, Math.round(path.length * 0.08 * 100) / 100))}. Coût initial : ${formatMoney(cost)}.`);
   return cost;
 }
 
