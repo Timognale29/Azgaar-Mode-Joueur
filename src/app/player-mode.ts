@@ -558,7 +558,11 @@ export const PlayerMode = {
       playerStateId = getPlayerStateId();
       pendingMove = null;
       if (campaignActive && playerStateId) applyCampaignMode(true);
-      else updateHud();
+      else if (campaignActive) applyCampaignMode(false);
+      else {
+        options.map.viewOnly = false;
+        updateHud();
+      }
     });
     if (playerStateId) applyCampaignMode(true);
     tick();
