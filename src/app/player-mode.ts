@@ -8,7 +8,6 @@ import {
   advanceTurn,
   buildMarket,
   buildRoad,
-  canAfford,
   formatMoney,
   getAttitude,
   getCampaign,
@@ -105,9 +104,6 @@ function showActionError(error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   const notice = el("p", "player-mode-error", message);
   content?.prepend(notice);
-}
-function selectOption(select: HTMLSelectElement, value: string): void {
-  select.value = value;
 }
 function createSlider(
   label: string,
