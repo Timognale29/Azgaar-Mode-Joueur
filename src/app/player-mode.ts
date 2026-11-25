@@ -423,6 +423,7 @@ function attachBurgActions(burgId: number): void {
   citadel.disabled = Boolean(burg.citadel);
   actions.append(market, urban, walls, citadel);
   actions.append(actionButton("Consulter l'économie de la ville", () => Controllers.BurgEconomyOverview.open(burgId)));
+  actions.append(actionButton("Ouvrir le gouvernement de " + (owner?.name ?? "cet État"), () => showStateActions(ownerId)));
   body.append(actions);
 }
 
