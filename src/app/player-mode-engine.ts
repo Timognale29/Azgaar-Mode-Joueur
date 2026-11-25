@@ -186,7 +186,7 @@ export function importCampaignData(raw: string): void {
   const validIds = new Set(livingStates().map(state => String(state.i)));
   const funds: Record<string, number> = {};
   for (const [id, value] of Object.entries(imported.funds)) {
-    if (!validIds.has(id) || typeof value !== "number" || !Number.isFinite(value) || value < 0)
+    if (!validIds.has(id) || typeof value !== "number" || !Number.isFinite(value))
       throw new Error("La sauvegarde contient un trésor invalide.");
     funds[id] = Math.round(value * 100) / 100;
   }
