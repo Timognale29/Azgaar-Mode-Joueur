@@ -300,6 +300,8 @@ export function buildMarket(burgId: number, stateId: number): number {
     addLog(`Le marché de ${burg.name ?? "la ville"} est ouvert. Entretien par tour : 4. Les échanges seront recalculés au prochain tour.`);
     return cost;
   } catch (error) {
+    const partialMarket = globalThis.pack.markets.find(market => market.centerBurgId === burgId);
+    if (partialMarket) Markets.removeMarket(partialMarket.i);
     const save = getOrCreateCampaign();
     save.funds[String(stateId)] += cost;
     persist();
@@ -369,7 +371,6 @@ export function buildRoad(fromBurgId: number, toBurgId: number, stateId: number)
   if (fromBurgId === toBurgId) throw new Error("Choisis deux villes différentes.");
   const path = findLandPath(from.cell, to.cell, stateId);
   const cost = Math.round(ROAD_BASE_COST + path.length * 1.8);
-  charge(stateId, cost, `Construction d'une route entre ${from.name ?? from.i} et ${to.name ?? to.i}`);
 
   const routeId = Math.max(0, ...globalThis.pack.routes.map(route => route.i)) + 1;
   const points = path.cells.map(cellId => {
@@ -394,6 +395,7 @@ export function buildRoad(fromBurgId: number, toBurgId: number, stateId: number)
     ab: links[path.cells[index]]?.[cell],
     ba: links[cell]?.[path.cells[index]]
   }));
+  charge(stateId, cost, `Construction d'une route entre ${from.name ?? from.i} et ${to.name ?? to.i}`);
   try {
     globalThis.pack.routes.push(route);
     for (const {a, b} of previousLinks) {
@@ -627,13 +629,20 @@ export function negotiate(playerId: number, targetId: number, kind: TreatyKind |
 export function setEmbargo(playerId: number, targetId: number): void {
   stateById(playerId);
   stateById(targetId);
-  breakTreatiesBetween(playerId, targetId);
   charge(playerId, 85, "Mise en place d'un embargo");
-  States.setTariffs(playerId, [
-    ...stateById(playerId).economy.tariffs.filter(rule => !(rule.states !== "all" && rule.states.includes(targetId))),
-    {states: [targetId], goods: "all", rate: "embargo"}
-  ]);
-  addLog(`Embargo commercial décrété contre ${stateById(targetId).name}.`);
+  try {
+    States.setTariffs(playerId, [
+      ...stateById(playerId).economy.tariffs.filter(rule => !(rule.states !== "all" && rule.states.includes(targetId))),
+      {states: [targetId], goods: "all", rate: "embargo"}
+    ]);
+    breakTreatiesBetween(playerId, targetId);
+    addLog(`Embargo commercial décrété contre ${stateById(targetId).name}.`);
+  } catch (error) {
+    const save = getOrCreateCampaign();
+    save.funds[String(playerId)] += 85;
+    persist();
+    throw error;
+  }
 }
 
 function updateAIDiplomacy(playerId: number): void {
