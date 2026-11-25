@@ -581,8 +581,11 @@ function renderConstruction(state: State): void {
   else for (const project of projects) {
     const entityName = project.kind === "market"
       ? globalThis.pack.markets.find(item => item.i === project.entityId)?.name ?? ("Marché " + project.entityId)
-      : globalThis.pack.routes.find(item => item.i === project.entityId)?.name ?? ("Route " + project.entityId);
-    projectList.append(row((project.kind === "market" ? "Marché · " : "Route · ") + entityName, money(project.upkeep) + " / tour"));
+      : project.kind === "road"
+        ? globalThis.pack.routes.find(item => item.i === project.entityId)?.name ?? ("Route " + project.entityId)
+        : globalThis.pack.burgs[project.entityId]?.name ?? ("Ville " + project.entityId);
+    const projectLabel = project.kind === "market" ? "Marché · " : project.kind === "road" ? "Route · " : "Amélioration urbaine · ";
+    projectList.append(row(projectLabel + entityName, money(project.upkeep) + " / tour"));
   }
   const playerRoutes = globalThis.pack.routes.filter(route => {
     const routeCells = route.cells ?? [];
