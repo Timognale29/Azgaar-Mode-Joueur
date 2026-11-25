@@ -1,6 +1,7 @@
 import type {} from "@/model/globals";
 import { Accounts } from "@/model/economy/accounts";
 import { Burgs } from "@/model/political/burgs-generator";
+import { Military, type Regiment } from "@/model/political/military-generator";
 import { Markets } from "@/model/economy/markets-generator";
 import { Production } from "@/model/economy/production-generator";
 import type { Route } from "@/model/economy/routes-generator";
@@ -166,6 +167,99 @@ export function getPlayerStateId(): number | null {
 export function getFunds(stateId: number): number {
   const save = getOrCreateCampaign();
   return save.funds[String(stateId)] ?? 0;
+}
+
+const REGIMENT_RAISE_COST = 90;
+
+/** Raise an empty regiment at the state's capital. Troops must then be recruited and paid for. */
+export function raiseRegiment(stateId: number): Regiment {
+  const state = stateById(stateId);
+  const capital = globalThis.pack.burgs[state.capital];
+  if (!capital || capital.removed) throw new Error("Cet État n'a pas de capitale utilisable.");
+  const cell = capital.cell;
+  const point = globalThis.pack.cells.p[cell];
+  if (!point) throw new Error("La position de la capitale est introuvable.");
+  charge(stateId, REGIMENT_RAISE_COST, "Levée d'un nouveau régiment");
+  try {
+    const regimentId = Military.add(stateId, point[0], point[1]);
+    const regiment = state.military?.find(candidate => candidate.i === regimentId);
+    if (!regiment) throw new Error("Azgaar n'a pas pu créer le régiment.");
+    addLog("Nouveau régiment levé à " + capital.name + " : " + regiment.name + ".");
+    return regiment;
+  } catch (error) {
+    const save = getOrCreateCampaign();
+    save.funds[String(stateId)] = (save.funds[String(stateId)] ?? 0) + REGIMENT_RAISE_COST;
+    persist();
+    throw error;
+  }
+}
+
+/** Recruit a positive number of troops of one existing Azgaar unit type, after charging the treasury. */
+export function recruitRegiment(stateId: number, regimentId: number, unitName: string, quantity: number): number {
+  const state = stateById(stateId);
+  const regiment = state.military?.find(candidate => candidate.i === regimentId);
+  if (!regiment) throw new Error("Ce régiment n'appartient pas à votre État.");
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 50000)
+    throw new Error("Le recrutement doit être compris entre 1 et 50 000 soldats.");
+  const unit = options.map.military.units.find(candidate => candidate.name === unitName);
+  if (!unit) throw new Error("Ce type d'unité n'existe plus dans le registre militaire.");
+  const previous = Military.getTroops(regiment.u[unitName] ?? 0);
+  const costPerTroop = Math.max(0.5, Math.min(2.5, 0.65 + Math.max(0, Number(unit.power) || 0) * 0.12));
+  const cost = Math.ceil(quantity * costPerTroop);
+  charge(stateId, cost, "Recrutement de " + quantity + " " + unitName);
+  try {
+    const composition = Object.fromEntries(
+      Object.entries(regiment.u).map(([name, amount]) => [name, Military.getTroops(amount)])
+    );
+    composition[unitName] = previous + quantity;
+    Military.setUnits(stateId, regimentId, composition);
+    addLog(regiment.name + " recrute " + quantity + " " + unitName + " pour " + formatMoney(cost) + ".");
+    return cost;
+  } catch (error) {
+    const save = getOrCreateCampaign();
+    save.funds[String(stateId)] = (save.funds[String(stateId)] ?? 0) + cost;
+    persist();
+    throw error;
+  }
+}
+
+/** Move a regiment within friendly territory with a distance-based, paid movement order. */
+export function moveRegiment(stateId: number, regimentId: number, targetCell: number): number {
+  const state = stateById(stateId);
+  const regiment = state.military?.find(candidate => candidate.i === regimentId);
+  if (!regiment) throw new Error("Ce régiment n'appartient pas à votre État.");
+  const cells = globalThis.pack.cells;
+  if (!Number.isInteger(targetCell) || targetCell < 0 || targetCell >= cells.i.length)
+    throw new Error("Cellule de destination invalide.");
+  const targetOwner = Number(cells.state[targetCell] ?? 0);
+  if (targetOwner !== 0 && targetOwner !== stateId && getAttitude(stateId, targetOwner) !== "Ally")
+    throw new Error("Les régiments ne peuvent se déplacer que sur votre territoire, les terres neutres ou celles d'un allié.");
+  const isWater = cells.h[targetCell] < 20;
+  if (Boolean(regiment.n) !== isWater)
+    throw new Error(regiment.n ? "Une flotte doit rester en mer ou sur un lac navigable." : "Un régiment terrestre ne peut pas être envoyé sur l'eau.");
+  const [x, y] = cells.p[targetCell];
+  const distance = Math.hypot(x - regiment.x, y - regiment.y);
+  const range = Math.max(20, Math.min(options.map.graph.width, options.map.graph.height) * 0.22);
+  if (distance > range)
+    throw new Error("Destination trop éloignée pour un seul ordre. Choisis une étape plus proche.");
+  const cost = Math.max(8, Math.ceil(distance * 0.28));
+  charge(stateId, cost, "Ordre de déplacement de " + regiment.name);
+  try {
+    Military.move(stateId, regimentId, x, y);
+    Military.setBase(stateId, regimentId, x, y);
+    regiment.cell = targetCell;
+    addLog(regiment.name + " se déplace vers la cellule " + targetCell + " (" + formatMoney(cost) + ").");
+    return cost;
+  } catch (error) {
+    const save = getOrCreateCampaign();
+    save.funds[String(stateId)] = (save.funds[String(stateId)] ?? 0) + cost;
+    persist();
+    throw error;
+  }
+}
+
+export function getRegimentsForState(stateId: number): Regiment[] {
+  return [...(stateById(stateId).military ?? [])];
 }
 export function exportCampaignData(): string {
   const save = getOrCreateCampaign();
