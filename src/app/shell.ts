@@ -7,6 +7,7 @@ import { Layers } from "@/renderers/layers";
 import { Services } from "@/services";
 import { ARROW_TIP_KEY } from "@/services/versioning";
 import { Dialog } from "@/ui/dialog/dialog";
+import { PlayerMode } from "./player-mode";
 
 import { fitMapToScreen } from "@/ui/map/canvas";
 import { showDataTip } from "@/ui/tooltips";
@@ -23,6 +24,7 @@ export function initShell(): void {
   window.addEventListener("vite:preloadError", onChunkLoadError);
   addDragToUpload();
   initAssistantBubble();
+  PlayerMode.init();
 
   if (!isLocalhost() && !isElectron()) window.onbeforeunload = () => t("Are you sure you want to navigate away?");
   if (isElectron()) removeWebOnlyControls();
