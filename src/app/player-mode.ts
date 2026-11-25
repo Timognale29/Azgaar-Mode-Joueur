@@ -879,11 +879,8 @@ export const PlayerMode = {
     window.addEventListener("map:generated", () => {
       const availableStates = getStates();
       if (!availableStates.length) return;
-      const savedStateId = getCampaign().playerStateId;
-      selectedStateId = availableStates.some(candidate => candidate.i === savedStateId)
-        ? savedStateId
-        : availableStates[0].i;
-      if (selectedStateId !== null) setPlayerState(selectedStateId);
+      const savedStateId = getPlayerStateId();
+      selectedStateId = availableStates.some(candidate => candidate.i === savedStateId) ? savedStateId : null;
       render();
     });
 
