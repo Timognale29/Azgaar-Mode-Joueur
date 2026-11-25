@@ -96,7 +96,7 @@ const preloadApp = (): Plugin => {
 
 export default ({ mode }: { mode: string }) => ({
   root: "./src",
-  base: mode === "electron" ? "./" : process.env.NETLIFY ? "/" : "/Fantasy-Map-Generator/",
+  base: mode === "electron" ? "./" : process.env.GITHUB_PAGES ? "/Azgaar-Mode-Joueur/" : process.env.NETLIFY ? "/" : "/Fantasy-Map-Generator/",
   plugins: [slimEnglish, preloadApp(), latestUpdate, ...(mode === "electron" ? [stripWebOnlyTags] : [])],
   build: {
     outDir: mode === "electron" ? "../dist-electron/renderer" : "../dist",
