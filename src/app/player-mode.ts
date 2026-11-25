@@ -2,10 +2,13 @@ import type {} from "@/model/globals";
 import "./player-mode.css";
 import { Controllers } from "@/controllers";
 import { Layers } from "@/renderers/layers";
+import { Pack } from "@/model/graph/pack-generator";
+import { getPointer } from "@/utils/node-utils";
 import type { Burg } from "@/model/political/burgs-generator";
 import type { State } from "@/model/political/states-generator";
 import {
-  advanceTurn,
+  advanceClock,
+  getStateIdentity,
   buildMarket,
   buildRoad,
   buildCityFortification,
@@ -51,6 +54,18 @@ let assistantMessages: {role: "user" | "assistant"; text: string}[] = [];
 let assistantHistory: Message[] = [];
 let assistantHistoryStateId: number | null = null;
 let assistantBusy = false;
+let campaignActive = false;
+let gamePaused = true;
+let gameSpeed = 1;
+let previousViewOnly = false;
+let selectedCellId: number | null = null;
+let selectedBurgId: number | null = null;
+let selectedMapStateId: number | null = null;
+let simulationTimer: number | null = null;
+let lastSimulationTick = 0;
+let clockOutput: HTMLElement | null = null;
+let pauseButton: HTMLButtonElement | null = null;
+let speedButton: HTMLButtonElement | null = null;
 
 const tabs: {id: PlayerTab; label: string}[] = [
   {id: "overview", label: "État"},
@@ -72,7 +87,7 @@ function getStates(): State[] {
   return (globalThis.pack?.states ?? []).filter(state => state && state.i > 0 && !state.removed);
 }
 function getSelectedState(): State | undefined {
-  return getStates().find(state => state.i === selectedStateId) ?? getStates()[0];
+  return selectedStateId === null ? undefined : getStates().find(state => state.i === selectedStateId);
 }
 function getStateBurgs(stateId: number): Burg[] {
   return (globalThis.pack?.burgs ?? []).filter(burg => burg && burg.i > 0 && !burg.removed && burg.state === stateId);
@@ -144,17 +159,118 @@ function createSlider(
   wrapper.append(heading, input);
   return {wrapper, input};
 }
-function callAdvanceTurn(stateId: number): void {
-  try {
-    const result = advanceTurn(stateId);
-    Layers.drawAll();
-    render();
-    const summary = result.changes.length ? result.changes.slice(0, 5).join(" · ") : "Aucun changement démographique notable.";
-    const note = el("p", "player-mode-note", "Tour " + (result.turn - 1) + " terminé. " + summary);
-    content?.prepend(note);
-  } catch (error) {
-    showActionError(error);
+function formatGameClock(elapsedHours: number): string {
+  const safeHours = Math.max(0, elapsedHours);
+  const day = Math.floor(safeHours / 24) + 1;
+  const hour = Math.floor(safeHours % 24);
+  const minute = Math.floor((safeHours % 1) * 60);
+  return "Jour " + day + " · " + String(hour).padStart(2, "0") + ":" + String(minute).padStart(2, "0");
+}
+function updateClockDisplay(): void {
+  if (!clockOutput) return;
+  clockOutput.textContent = formatGameClock(getCampaign().elapsedHours ?? 0);
+  if (pauseButton) pauseButton.textContent = gamePaused ? "▶ Reprendre" : "Ⅱ Pause";
+  if (speedButton) speedButton.textContent = "Vitesse ×" + gameSpeed;
+}
+function startSimulationTimer(): void {
+  if (simulationTimer !== null) return;
+  lastSimulationTick = Date.now();
+  simulationTimer = window.setInterval(() => {
+    const now = Date.now();
+    const elapsedSeconds = Math.min(2, Math.max(0, (now - lastSimulationTick) / 1000));
+    lastSimulationTick = now;
+    if (!campaignActive || gamePaused || selectedStateId === null || elapsedSeconds <= 0) {
+      updateClockDisplay();
+      return;
+    }
+    try {
+      const result = advanceClock(selectedStateId, elapsedSeconds * gameSpeed);
+      updateClockDisplay();
+      if (result.days > 0) {
+        Layers.drawAll();
+        render();
+      }
+    } catch (error) {
+      gamePaused = true;
+      updateClockDisplay();
+      showActionError(error);
+    }
+  }, 1000);
+}
+function toggleGamePause(): void {
+  gamePaused = !gamePaused;
+  lastSimulationTick = Date.now();
+  updateClockDisplay();
+}
+function cycleGameSpeed(): void {
+  gameSpeed = gameSpeed === 1 ? 2 : gameSpeed === 2 ? 4 : 8;
+  updateClockDisplay();
+}
+function returnToSandbox(): void {
+  applyCampaignLock(false);
+  render();
+}
+function resumeCampaign(): void {
+  if (getPlayerStateId() === null) return;
+  selectedStateId = getPlayerStateId();
+  gamePaused = false;
+  applyCampaignLock(true);
+  updateClockDisplay();
+  render();
+}
+function renderMapSelection(cellId: number): void {
+  const cells = globalThis.pack?.cells;
+  if (!cells) return;
+  const stateId = Number(cells.state?.[cellId] ?? 0);
+  const burgId = Number(cells.burg?.[cellId] ?? 0);
+  const cultureId = Number(cells.culture?.[cellId] ?? 0);
+  const religionId = Number(cells.religion?.[cellId] ?? 0);
+  const owner = globalThis.pack.states[stateId];
+  const burg = globalThis.pack.burgs[burgId];
+  const culture = globalThis.pack.cultures[cultureId];
+  const religion = globalThis.pack.religions[religionId];
+  const card = el("div", "player-mode-card player-mode-map-selection");
+  card.append(sectionTitle(burg?.name ?? (owner?.name ?? "Terres neutres"), burg ? "Ville sélectionnée sur la carte" : "Territoire sélectionné sur la carte"));
+  card.append(
+    row("Propriétaire", owner?.fullName ?? owner?.name ?? "Terres neutres"),
+    row("Culture locale", culture?.name ?? "Non renseignée"),
+    row("Religion locale", religion?.name ?? "Pluralité / non renseignée"),
+    row("Cellule", String(cellId))
+  );
+  if (burg && owner?.i === selectedStateId) {
+    card.append(makeButton("Afficher cette ville dans la gestion urbaine", () => {
+      activeTab = "cities";
+      render();
+      content?.querySelector(".player-mode-list-item.is-map-selected")?.scrollIntoView({block: "center"});
+    }));
+  } else if (owner?.i && owner.i !== selectedStateId) {
+    card.append(makeButton("Ouvrir la diplomatie avec " + (owner.name ?? "cet État"), () => {
+      selectedMapStateId = owner.i;
+      activeTab = "diplomacy";
+      render();
+    }));
   }
+  content?.prepend(card);
+}
+function handleMapClick(event: Event): void {
+  if (!campaignActive || !(event instanceof CustomEvent)) return;
+  const mouseEvent = event.detail as MouseEvent;
+  if (!(mouseEvent instanceof MouseEvent)) return;
+  const viewbox = document.getElementById("viewbox");
+  if (!viewbox) return;
+  const point = getPointer(mouseEvent, viewbox);
+  const cellId = Pack.findCell(point[0], point[1]);
+  if (cellId === undefined) return;
+  selectedCellId = cellId;
+  const stateId = Number(globalThis.pack.cells.state?.[cellId] ?? 0);
+  const burgId = Number(globalThis.pack.cells.burg?.[cellId] ?? 0);
+  selectedMapStateId = stateId || null;
+  selectedBurgId = burgId || null;
+  if (burgId && globalThis.pack.burgs[burgId]?.state === selectedStateId) activeTab = "cities";
+  else if (stateId && stateId !== selectedStateId) activeTab = "diplomacy";
+  else activeTab = "overview";
+  render();
+  renderMapSelection(cellId);
 }
 
 function renderOverview(state: State): void {
