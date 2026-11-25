@@ -1,5 +1,6 @@
 import type {} from "@/model/globals";
 import { Accounts } from "@/model/economy/accounts";
+import { Burgs } from "@/model/political/burgs-generator";
 import { Markets } from "@/model/economy/markets-generator";
 import { Production } from "@/model/economy/production-generator";
 import type { Route } from "@/model/economy/routes-generator";
@@ -26,7 +27,7 @@ export interface PlayerWar {
   endReason?: "victory" | "stalemate" | "peace";
 }
 export interface PlayerProject {
-  kind: "market" | "road" | "urban_upgrade";
+  kind: "market" | "road" | "urban_upgrade" | "fortification" | "citadel";
   stateId: number;
   entityId: number;
   upkeep: number;
@@ -204,7 +205,7 @@ export function importCampaignData(raw: string): void {
   const projects = Array.isArray(imported.projects) ? imported.projects.filter(project =>
     project && stateExists(project.stateId) && Number.isInteger(project.entityId) &&
     Number.isFinite(project.upkeep) && project.upkeep >= 0 &&
-    (project.kind === "market" || project.kind === "road" || project.kind === "urban_upgrade")
+    (["market", "road", "urban_upgrade", "fortification", "citadel"] as string[]).includes(project.kind)
   ) : [];
   campaign = {
     key: expectedKey,
@@ -324,6 +325,52 @@ export function upgradeCity(burgId: number, stateId: number): number {
   persist();
   addLog("Projet urbain lancé à " + (burg.name ?? "la ville") + " : coût " + formatMoney(cost) + ", entretien 2 par tour.");
   return cost;
+}
+
+
+const FORTIFICATION_BASE_COST = 340;
+const CITADEL_BASE_COST = 620;
+export function fortificationCostFor(burgId: number, stateId: number): number {
+  const burg = findBurg(burgId, stateId);
+  if (burg.walls) throw new Error("Cette ville possède déjà des fortifications.");
+  return Math.round(FORTIFICATION_BASE_COST + Math.max(0, burg.population ?? 0) * 0.045);
+}
+export function citadelCostFor(burgId: number, stateId: number): number {
+  const burg = findBurg(burgId, stateId);
+  if (burg.citadel) throw new Error("Cette ville possède déjà une citadelle.");
+  return Math.round(CITADEL_BASE_COST + Math.max(0, burg.population ?? 0) * 0.07);
+}
+export function buildCityFortification(burgId: number, stateId: number): number {
+  const burg = findBurg(burgId, stateId);
+  const cost = fortificationCostFor(burgId, stateId);
+  charge(stateId, cost, "Construction de fortifications à " + (burg.name ?? "la ville"));
+  try {
+    Burgs.setBuilding(burgId, "walls", true);
+    getOrCreateCampaign().projects.push({kind: "fortification", stateId, entityId: burgId, upkeep: 3});
+    persist();
+    addLog("Les remparts de " + (burg.name ?? "la ville") + " sont achevés. Entretien : 3 par tour.");
+    return cost;
+  } catch (error) {
+    getOrCreateCampaign().funds[String(stateId)] += cost;
+    persist();
+    throw error;
+  }
+}
+export function buildCityCitadel(burgId: number, stateId: number): number {
+  const burg = findBurg(burgId, stateId);
+  const cost = citadelCostFor(burgId, stateId);
+  charge(stateId, cost, "Construction d'une citadelle à " + (burg.name ?? "la ville"));
+  try {
+    Burgs.setBuilding(burgId, "citadel", true);
+    getOrCreateCampaign().projects.push({kind: "citadel", stateId, entityId: burgId, upkeep: 5});
+    persist();
+    addLog("La citadelle de " + (burg.name ?? "la ville") + " est achevée. Entretien : 5 par tour.");
+    return cost;
+  } catch (error) {
+    getOrCreateCampaign().funds[String(stateId)] += cost;
+    persist();
+    throw error;
+  }
 }
 
 function findLandPath(startCell: number, goalCell: number, stateId: number): {cells: number[]; length: number} {
@@ -771,7 +818,9 @@ export function advanceTurn(playerId: number): {turn: number; changes: string[]}
     const prosperity = Accounts.ofState(state.i)?.prosperity ?? 0.5;
     const urbanProjects = save.projects.filter(project => project.kind === "urban_upgrade" && project.entityId === burg.i && project.stateId === state.i).length;
     const growth = clamp(0.001 + (prosperity - 0.5) * 0.012 + urbanProjects * 0.0008, -0.006, 0.012);
-    burg.population = Math.max(1, Math.round(population * (1 + growth)));
+    const {scale, urbanization} = options.map.units.population;
+    const people = population * scale * urbanization.rate;
+    Burgs.setPopulation(burg.i, Math.max(1, Math.round(people * (1 + growth))));
   }
   applyProjectUpkeep();
   save.turn++;
