@@ -438,13 +438,126 @@ export function relationScore(subjectId: number, objectId: number): number {
   return score;
 }
 
+function breakTreatiesBetween(a: number, b: number): void {
+  const save = getOrCreateCampaign();
+  for (const treaty of save.treaties) {
+    if (treaty.status !== "active") continue;
+    if ((treaty.a === a && treaty.b === b) || (treaty.a === b && treaty.b === a)) treaty.status = "broken";
+  }
+}
+
+function getActiveWar(a: number, b: number): PlayerWar | undefined {
+  return getOrCreateCampaign().wars.find(war =>
+    war.status === "active" &&
+    ((war.attacker === a && war.defender === b) || (war.attacker === b && war.defender === a))
+  );
+}
+
+function signPeace(a: number, b: number, war?: PlayerWar, result: "peace" | "stalemate" | "victory" = "peace", winner?: number): void {
+  if (war) {
+    war.status = "ended";
+    war.endReason = result;
+    war.winner = winner;
+  }
+  States.setRelation(a, b, "Friendly");
+  const save = getOrCreateCampaign();
+  if (!treatyExists("paix", a, b))
+    save.treaties.push({kind: "paix", a, b, signedTurn: save.turn, status: "active"});
+  persist();
+}
+
+function warPower(stateId: number): number {
+  const state = stateById(stateId);
+  const population = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
+  const militaryBudget = state.economy.budget.military ?? 0;
+  const alert = state.alert ?? 1;
+  const activeAllies = getOrCreateCampaign().treaties.filter(treaty =>
+    treaty.status === "active" &&
+    treaty.kind === "alliance" &&
+    (treaty.a === stateId || treaty.b === stateId)
+  ).length;
+  return 10 + militaryBudget * 0.55 + alert * 3 + Math.log10(population + 10) * 5 + activeAllies * 4;
+}
+
+function finishWar(war: PlayerWar, reason: "victory" | "stalemate", winner?: number): void {
+  const save = getOrCreateCampaign();
+  const {attacker, defender} = war;
+  if (winner) {
+    const loser = winner === attacker ? defender : attacker;
+    const loserFunds = Math.max(0, save.funds[String(loser)] ?? 0);
+    const reparations = Math.min(200, Math.round(loserFunds * 0.05));
+    if (reparations > 0) {
+      save.funds[String(loser)] -= reparations;
+      save.funds[String(winner)] = (save.funds[String(winner)] ?? 0) + reparations;
+    }
+    signPeace(winner, loser, war, "victory", winner);
+    addLog(`Fin du conflit entre ${stateById(attacker).name} et ${stateById(defender).name} : victoire de ${stateById(winner).name}. Réparations : ${formatMoney(reparations)}. Aucun territoire n'est annexé automatiquement.`);
+  } else {
+    signPeace(attacker, defender, war, "stalemate");
+    addLog(`Fin du conflit entre ${stateById(attacker).name} et ${stateById(defender).name} : trêve après ${war.turns} tours sans vainqueur décisif.`);
+  }
+  persist();
+}
+
+function processWars(): void {
+  const save = getOrCreateCampaign();
+  for (const war of save.wars) {
+    if (war.status !== "active") continue;
+    const attacker = stateById(war.attacker);
+    const defender = stateById(war.defender);
+    const upkeep = (state: State) => Math.min(180, Math.round(35 + Math.sqrt(Math.max(0, (state.rural ?? 0) + (state.urban ?? 0))) * 0.8));
+    const attackerUpkeep = upkeep(attacker);
+    const defenderUpkeep = upkeep(defender);
+    save.funds[String(attacker.i)] = (save.funds[String(attacker.i)] ?? 0) - attackerUpkeep;
+    save.funds[String(defender.i)] = (save.funds[String(defender.i)] ?? 0) - defenderUpkeep;
+    war.turns++;
+    const attackerSupply = save.funds[String(attacker.i)] >= 0 ? 1 : -Math.min(5, Math.abs(save.funds[String(attacker.i)]) / 250);
+    const defenderSupply = save.funds[String(defender.i)] >= 0 ? 1 : -Math.min(5, Math.abs(save.funds[String(defender.i)]) / 250);
+    const advantage = (warPower(attacker.i) - warPower(defender.i)) * 0.12 + (attackerSupply - defenderSupply) * 1.5;
+    war.score = clamp(war.score + clamp(advantage, -8, 8), -100, 100);
+
+    addLog(`Conflit : ${attacker.name} contre ${defender.name}. Entretien militaire : ${formatMoney(attackerUpkeep)} / ${formatMoney(defenderUpkeep)}. Score stratégique : ${numberText(war.score)}.`);
+    if (war.score >= 100) finishWar(war, "victory", attacker.i);
+    else if (war.score <= -100) finishWar(war, "victory", defender.i);
+    else if (war.turns >= 12) finishWar(war, "stalemate");
+  }
+  persist();
+}
+
+function numberText(value: number): string {
+  return new Intl.NumberFormat("fr-FR", {maximumFractionDigits: 1, signDisplay: "always"}).format(value);
+}
+
+function applyProjectUpkeep(): void {
+  const save = getOrCreateCampaign();
+  const activeProjects = [];
+  for (const project of save.projects) {
+    const exists = project.kind === "market"
+      ? globalThis.pack.markets.some(market => market.i === project.entityId && globalThis.pack.burgs[market.centerBurgId]?.state === project.stateId)
+      : globalThis.pack.routes.some(route => route.i === project.entityId && route.tags?.includes(`owner:${project.stateId}`));
+    if (!exists) {
+      addLog(`Un chantier entretenu par ${stateById(project.stateId).name} a disparu de la carte ; son entretien est supprimé.`);
+      continue;
+    }
+    const before = save.funds[String(project.stateId)] ?? 0;
+    save.funds[String(project.stateId)] = Math.round((before - project.upkeep) * 100) / 100;
+    if (before >= 0 && save.funds[String(project.stateId)] < 0)
+      addLog(`${stateById(project.stateId).name} passe en déficit à cause de l'entretien de ses infrastructures.`);
+    activeProjects.push(project);
+  }
+  save.projects = activeProjects;
+}
+
 function removeTariffsAgainst(stateId: number, partnerId: number): void {
+
   const state = stateById(stateId);
   const tariffs = state.economy.tariffs.flatMap(rule => {
     if (rule.states === "all" || !rule.states.includes(partnerId)) return [rule];
     const remaining = rule.states.filter(id => id !== partnerId);
     return remaining.length ? [{...rule, states: remaining}] : [];
   });
+  // An explicit zero tariff overrides any broad "all countries" tax rule.
+  tariffs.push({states: [partnerId], goods: "all", rate: 0});
   States.setTariffs(stateId, tariffs);
 }
 
@@ -460,14 +573,30 @@ export function negotiate(playerId: number, targetId: number, kind: TreatyKind |
   const cost = kind === "guerre" ? WAR_MOBILIZATION_COST : DIPLOMACY_COST;
   charge(playerId, cost, kind === "guerre" ? "Mobilisation diplomatique" : "Mission diplomatique");
   if (kind === "guerre") {
+    if (getActiveWar(playerId, targetId)) throw new Error("Un conflit est déjà en cours entre ces deux États.");
+    breakTreatiesBetween(playerId, targetId);
     States.setRelation(playerId, targetId, "Enemy");
-    addLog(`Conflit déclaré entre ${player.name} et ${target.name}. Les hostilités sont simulées par les relations diplomatiques, sans combat détaillé.`);
+    getOrCreateCampaign().wars.push({
+      attacker: playerId,
+      defender: targetId,
+      startedTurn: getOrCreateCampaign().turn,
+      turns: 0,
+      score: 0,
+      status: "active"
+    });
+    addLog(`Conflit déclaré entre ${player.name} et ${target.name}. Chaque camp paie un entretien militaire à chaque tour ; la puissance, le budget et le ravitaillement déterminent un score stratégique abstrait.`);
+    persist();
     return {accepted: true, score: relationScore(playerId, targetId), cost};
   }
 
   const score = relationScore(playerId, targetId);
+  const war = kind === "paix" ? getActiveWar(playerId, targetId) : undefined;
+  const playerAdvantage = war ? (war.attacker === playerId ? war.score : -war.score) : 0;
+  const targetAdvantage = -playerAdvantage;
   const required = kind === "alliance" ? 34 : kind === "commerce" ? 4 : -4;
-  const accepted = score >= required || (kind === "paix" && player.diplomacy?.[targetId] === "Enemy" && score >= -18);
+  const accepted = kind === "paix" && war
+    ? targetAdvantage < 70
+    : score >= required;
   if (!accepted) {
     addLog(`${target.name} refuse la proposition de ${kind === "alliance" ? "alliance" : kind === "commerce" ? "traité commercial" : "paix"}.`);
     return {accepted: false, score, cost};
@@ -478,7 +607,8 @@ export function negotiate(playerId: number, targetId: number, kind: TreatyKind |
     removeTariffsAgainst(playerId, targetId);
     removeTariffsAgainst(targetId, playerId);
   } else if (kind === "paix") {
-    States.setRelation(playerId, targetId, "Friendly");
+    if (war) signPeace(playerId, targetId, war, "peace");
+    else States.setRelation(playerId, targetId, "Friendly");
   } else {
     if ((player.diplomacy?.[targetId] ?? "Neutral") === "Neutral")
       States.setRelation(playerId, targetId, "Friendly");
@@ -497,6 +627,7 @@ export function negotiate(playerId: number, targetId: number, kind: TreatyKind |
 export function setEmbargo(playerId: number, targetId: number): void {
   stateById(playerId);
   stateById(targetId);
+  breakTreatiesBetween(playerId, targetId);
   charge(playerId, 85, "Mise en place d'un embargo");
   States.setTariffs(playerId, [
     ...stateById(playerId).economy.tariffs.filter(rule => !(rule.states !== "all" && rule.states.includes(targetId))),
@@ -530,6 +661,14 @@ function updateAIDiplomacy(playerId: number): void {
 }
 export function getAttitude(fromId: number, toId: number): string {
   return stateById(fromId).diplomacy?.[toId] ?? "Neutral";
+}
+export function getWarsForState(stateId: number): PlayerWar[] {
+  return getOrCreateCampaign().wars.filter(war =>
+    war.attacker === stateId || war.defender === stateId
+  );
+}
+export function getProjectsForState(stateId: number): PlayerProject[] {
+  return getOrCreateCampaign().projects.filter(project => project.stateId === stateId);
 }
 
 function updateAIEconomicPolicies(playerId: number): void {
@@ -596,9 +735,11 @@ export function advanceTurn(playerId: number): {turn: number; changes: string[]}
     if (net < 0) changes.push(`${state.name} : déficit quotidien de ${formatMoney(Math.abs(net))}`);
   }
 
+  applyProjectUpkeep();
   save.turn++;
   updateAIEconomicPolicies(playerId);
   updateAIDiplomacy(playerId);
+  processWars();
   addLog(`Tour ${save.turn - 1} terminé : production et commerce recalculés, fiscalité collectée, populations ajustées et diplomatie mise à jour.`);
   persist();
   return {turn: save.turn, changes};
