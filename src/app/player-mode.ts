@@ -1,7 +1,6 @@
 import type {} from "@/model/globals";
 import { Controllers } from "@/controllers";
 import { Military } from "@/model/political/military-generator";
-import type { Regiment } from "@/model/political/military-generator";
 import { Layers } from "@/renderers/layers";
 import { Pack } from "@/model/graph/pack-generator";
 import { Dialog } from "@/ui/dialog/dialog";
@@ -95,9 +94,6 @@ function runAction(title: string, action: () => void, refresh?: () => void): voi
   }
 }
 
-function currentState() {
-  return playerStateId ? globalThis.pack.states[playerStateId] : undefined;
-}
 
 function formatClock(hours: number): string {
   const day = Math.floor(hours / 24) + 1;
