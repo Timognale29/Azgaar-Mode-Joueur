@@ -13,6 +13,7 @@ import {
   getAttitude,
   getCampaign,
   getFunds,
+  getPlayerStateId,
   getProjectsForState,
   getStateEconomy,
   getWarsForState,
@@ -252,7 +253,12 @@ function renderCities(state: State): void {
       el("span", "player-mode-muted", burg.capital ? "Capitale" : (burg.type ?? "Ville"))
     );
     const market = globalThis.pack.markets.some(entry => entry.centerBurgId === burg.i);
-    item.append(name, el("span", "player-mode-list-value", number(burg.population) + " hab. · " + (market ? "Marché" : "Sans marché")));
+    const cityActions = el("div", "player-mode-city-actions");
+    cityActions.append(
+      el("span", "player-mode-list-value", number(burg.population) + " hab. · " + (market ? "Marché" : "Sans marché")),
+      makeButton("Ouvrir l'éditeur Azgaar", () => Controllers.BurgEditor.open(burg.i))
+    );
+    item.append(name, cityActions);
     list.append(item);
   }
   wrapper.append(list);
@@ -748,13 +754,44 @@ function render(): void {
   }
 
   selector.disabled = false;
-  if (!states.some(state => state.i === selectedStateId)) {
-    selectedStateId = getCampaign().playerStateId ?? states[0].i;
-    if (!states.some(state => state.i === selectedStateId)) selectedStateId = states[0].i;
+  const lockedStateId = getPlayerStateId();
+  if (lockedStateId === null) {
+    selectedStateId = null;
+    const controls = panel?.querySelector<HTMLElement>(".player-mode-controls");
+    if (controls) controls.hidden = true;
+    const chooser = el("div", "player-mode-page player-mode-start");
+    chooser.append(sectionTitle("Choisis ton pays", "Ce choix définit ta campagne : tu garderas cet État pendant toute la partie."));
+    const countrySelect = el("select", "player-mode-select");
+    countrySelect.append(new Option("Choisir un État…", ""));
+    for (const candidate of states) countrySelect.append(new Option(candidate.fullName ?? candidate.name, String(candidate.i)));
+    const preview = el("p", "player-mode-note", "Sélectionne un pays pour afficher sa capitale, sa population et son trésor de départ.");
+    countrySelect.addEventListener("change", () => {
+      const candidate = states.find(item => item.i === Number(countrySelect.value));
+      preview.textContent = candidate
+        ? (candidate.fullName ?? candidate.name) + " · " + number((candidate.rural ?? 0) + (candidate.urban ?? 0)) + " habitants · capitale : " + (globalThis.pack.burgs[candidate.capital]?.name ?? "non renseignée")
+        : "Sélectionne un pays pour afficher ses informations.";
+    });
+    const start = makeButton("Commencer la campagne", () => {
+      const id = Number(countrySelect.value);
+      if (!states.some(item => item.i === id)) {
+        preview.textContent = "Choisis un État avant de commencer.";
+        return;
+      }
+      setPlayerState(id);
+      selectedStateId = id;
+      const controls = panel?.querySelector<HTMLElement>(".player-mode-controls");
+      if (controls) controls.hidden = true;
+      render();
+    }, "player-mode-primary");
+    chooser.append(countrySelect, preview, start);
+    content.replaceChildren(chooser);
+    return;
   }
-  if (getCampaign().playerStateId !== selectedStateId) setPlayerState(selectedStateId!);
-  for (const state of states) selector.append(new Option(state.fullName ?? state.name, String(state.i), false, state.i === selectedStateId));
-
+  selectedStateId = lockedStateId;
+  const controls = panel?.querySelector<HTMLElement>(".player-mode-controls");
+  if (controls) controls.hidden = true;
+  selector.disabled = true;
+  selector.replaceChildren(new Option(getStates().find(item => item.i === lockedStateId)?.fullName ?? getStates().find(item => item.i === lockedStateId)?.name ?? "État dirigé", String(lockedStateId)));
   const state = getSelectedState();
   if (!state) return;
   for (const button of tabButtons) {
@@ -776,10 +813,7 @@ export const PlayerMode = {
   init(): void {
     if (document.getElementById("playerModeToggle")) return;
     const states = getStates();
-    if (states.length) {
-      selectedStateId = getCampaign().playerStateId ?? states[0].i;
-      setPlayerState(selectedStateId);
-    }
+    selectedStateId = getPlayerStateId();
 
     const toggle = el("button", "player-mode-toggle", "⚑ JOUER");
     toggle.id = "playerModeToggle";
@@ -814,11 +848,9 @@ export const PlayerMode = {
     const controls = el("div", "player-mode-controls");
     const selectLabel = el("label", "", "État dirigé");
     selector = el("select", "player-mode-select");
+    selector.disabled = true;
     selector.addEventListener("change", () => {
-      selectedStateId = Number(selector?.value) || null;
-      if (selectedStateId !== null) setPlayerState(selectedStateId);
-      assistantHistory = [];
-      assistantHistoryStateId = selectedStateId;
+      // The player nation is immutable after campaign creation.
       render();
     });
     selectLabel.append(selector);
