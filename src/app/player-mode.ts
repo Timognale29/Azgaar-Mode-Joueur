@@ -841,6 +841,20 @@ export const PlayerMode = {
     content = el("div", "player-mode-content");
     panel.append(header, controls, nav, content);
     document.body.append(toggle, panel);
+
+    // The shell boots before the first map is generated or loaded.
+    // registerMap dispatches this event after both operations, so attach the player state then.
+    window.addEventListener("map:generated", () => {
+      const availableStates = getStates();
+      if (!availableStates.length) return;
+      const savedStateId = getCampaign().playerStateId;
+      selectedStateId = availableStates.some(candidate => candidate.i === savedStateId)
+        ? savedStateId
+        : availableStates[0].i;
+      if (selectedStateId !== null) setPlayerState(selectedStateId);
+      render();
+    });
+
     render();
   },
   toggle(): void {
