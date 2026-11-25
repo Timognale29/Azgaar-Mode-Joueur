@@ -41,6 +41,8 @@ import {
   advanceTurn,
   buildMarket,
   buildRoad,
+  buildCityFortification,
+  buildCityCitadel,
   exportCampaignData,
   getCampaign,
   getFunds,
@@ -159,6 +161,24 @@ describe("player mode campaign engine", () => {
     expect(getCampaign().projects).toEqual([
       {kind: "market", stateId: 1, entityId: 1, upkeep: 4}
     ]);
+  });
+
+  it("builds paid city walls and records their recurring upkeep", () => {
+    const initialFunds = getFunds(1);
+    const cost = buildCityFortification(1, 1);
+
+    expect(pack.burgs[1]!.walls).toBe(1);
+    expect(getFunds(1)).toBe(initialFunds - cost);
+    expect(getCampaign().projects).toContainEqual({kind: "fortification", stateId: 1, entityId: 1, upkeep: 3});
+  });
+
+  it("builds a paid citadel and records its recurring upkeep", () => {
+    const initialFunds = getFunds(1);
+    const cost = buildCityCitadel(1, 1);
+
+    expect(pack.burgs[1]!.citadel).toBe(1);
+    expect(getFunds(1)).toBe(initialFunds - cost);
+    expect(getCampaign().projects).toContainEqual({kind: "citadel", stateId: 1, entityId: 1, upkeep: 5});
   });
 
   it("refuses a project when the selected state cannot afford it", () => {
