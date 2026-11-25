@@ -205,7 +205,7 @@ describe("player mode campaign engine", () => {
   });
 
   it("refuses to route through a foreign state's land without charging", () => {
-    pack.burgs.push({i: 3, name: "Seconde", state: 1, cell: 2, population: 80, feature: 1});
+    pack.burgs.push({i: 3, name: "Seconde", state: 1, cell: 2, population: 80, feature: 1} as any);
     pack.cells = {
       i: [0, 1, 2],
       state: [1, 2, 1],
@@ -214,8 +214,8 @@ describe("player mode campaign engine", () => {
       c: [[1], [0, 2], [1]],
       biome: [0, 0, 0],
       routes: [{}, {}, {}]
-    };
-    pack.biomes = [{habitability: 100}];
+    } as any;
+    pack.biomes = [{habitability: 100}] as any;
     const initialFunds = getFunds(1);
 
     expect(() => buildRoad(1, 3, 1)).toThrow("Aucun chemin terrestre praticable");
