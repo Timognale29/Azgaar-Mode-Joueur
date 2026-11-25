@@ -40,6 +40,7 @@ export interface PlayerLogEntry {
 export interface PlayerCampaign {
   key: string;
   turn: number;
+  elapsedHours: number;
   playerStateId: number | null;
   funds: Record<string, number>;
   treaties: PlayerTreaty[];
@@ -119,6 +120,7 @@ function getOrCreateCampaign(): PlayerCampaign {
   campaign = saved ?? {
     key,
     turn: 1,
+    elapsedHours: 0,
     playerStateId: null,
     funds: {},
     treaties: [],
@@ -132,6 +134,7 @@ function getOrCreateCampaign(): PlayerCampaign {
   campaign.projects ??= [];
   campaign.log ??= [];
   if (!Number.isInteger(campaign.turn) || campaign.turn < 1) campaign.turn = 1;
+  if (!Number.isFinite(campaign.elapsedHours) || campaign.elapsedHours < 0) campaign.elapsedHours = (campaign.turn - 1) * 24;
 
   for (const state of livingStates()) {
     const id = String(state.i);
@@ -210,6 +213,7 @@ export function importCampaignData(raw: string): void {
   campaign = {
     key: expectedKey,
     turn: imported.turn,
+    elapsedHours: Number.isFinite(imported.elapsedHours) && imported.elapsedHours >= 0 ? imported.elapsedHours : (imported.turn - 1) * 24,
     playerStateId: imported.playerStateId && stateExists(imported.playerStateId) ? imported.playerStateId : null,
     funds,
     treaties,
@@ -485,11 +489,82 @@ export function buildRoad(fromBurgId: number, toBurgId: number, stateId: number)
   return cost;
 }
 
+export interface StateIdentitySummary {
+  cultureName: string;
+  cultureType: string;
+  cultureAncestry: string;
+  religionName: string;
+  religionType: string;
+  religionShare: number;
+  government: string;
+  governmentFamily: "theocracy" | "clan" | "republic" | "monarchy" | "other";
+}
+
+function getGovernmentFamily(state: State): StateIdentitySummary["governmentFamily"] {
+  const words = [state.form, state.formName, state.fullName, state.type, state.name].filter(Boolean).join(" ").toLowerCase();
+  if (/theocr|caliph|bishop|imamah|shaman|priest|patriarch|diocese|eparchy|holy state/.test(words)) return "theocracy";
+  if (/clan|tribe|chiefdom|horde|khagan|khanate|nomad|ulus|tribal/.test(words)) return "clan";
+  if (/republic|commune|council|federat|confeder|union|oligarch|democr|junta|city-state|free city|trade company/.test(words)) return "republic";
+  if (/kingdom|monarch|empire|duchy|duke|principality|sultanate|emirate|satrap|shogun|tsardom|dominion|march|beylik|despotate|viceroyalty/.test(words)) return "monarchy";
+  if (state.form === "Theocracy") return "theocracy";
+  if (state.form === "Union") return "clan";
+  if (state.form === "Republic") return "republic";
+  if (state.form === "Monarchy") return "monarchy";
+  return "other";
+}
+
+function dominantReligion(stateId: number): {id: number; share: number} {
+  const cells = globalThis.pack?.cells;
+  if (!cells?.state || !cells.religion) return {id: 0, share: 0};
+  const totals = new Map<number, number>();
+  let population = 0;
+  const count = Math.min(cells.state.length, cells.religion.length);
+  for (let cell = 0; cell < count; cell++) {
+    if (cells.state[cell] !== stateId) continue;
+    const weight = Math.max(0, Number(cells.pop?.[cell] ?? 1));
+    if (!weight) continue;
+    population += weight;
+    const religionId = Number(cells.religion[cell] ?? 0);
+    if (religionId > 0) totals.set(religionId, (totals.get(religionId) ?? 0) + weight);
+  }
+  let id = 0;
+  let amount = 0;
+  for (const [religionId, value] of totals) if (value > amount) [id, amount] = [religionId, value];
+  return {id, share: population ? amount / population : 0};
+}
+
+/** The map's own culture, religion and government are used by diplomatic and demographic simulation. */
+export function getStateIdentity(stateId: number): StateIdentitySummary {
+  const state = stateById(stateId);
+  const culture = globalThis.pack?.cultures?.[state.culture];
+  const faith = dominantReligion(stateId);
+  const religion = globalThis.pack?.religions?.[faith.id];
+  return {
+    cultureName: culture?.name ?? "Culture inconnue",
+    cultureType: culture?.type ?? "inconnue",
+    cultureAncestry: culture?.ancestry ?? "",
+    religionName: religion?.name ?? "Pluralité religieuse",
+    religionType: religion?.type ?? "",
+    religionShare: faith.share,
+    government: state.formName ?? state.form ?? state.type ?? "Gouvernement inconnu",
+    governmentFamily: getGovernmentFamily(state)
+  };
+}
+
 export function relationScore(subjectId: number, objectId: number): number {
   const subject = stateById(subjectId);
   const object = stateById(objectId);
   let score = 0;
-  if (subject.culture === object.culture) score += 28;
+  const subjectIdentity = getStateIdentity(subjectId);
+  const objectIdentity = getStateIdentity(objectId);
+  if (subject.culture === object.culture) score += 22;
+  else if (subjectIdentity.cultureAncestry && subjectIdentity.cultureAncestry === objectIdentity.cultureAncestry) score += 10;
+  if (subjectIdentity.cultureType && subjectIdentity.cultureType === objectIdentity.cultureType) score += 5;
+  if (subjectIdentity.religionName === objectIdentity.religionName && subjectIdentity.religionShare > 0.25 && objectIdentity.religionShare > 0.25) score += 22;
+  else if (subjectIdentity.religionShare > 0.65 && objectIdentity.religionShare > 0.65) score -= 8;
+  if (subjectIdentity.governmentFamily === objectIdentity.governmentFamily && subjectIdentity.governmentFamily !== "other") score += 8;
+  if ((subjectIdentity.governmentFamily === "theocracy" && objectIdentity.governmentFamily === "clan") ||
+      (subjectIdentity.governmentFamily === "clan" && objectIdentity.governmentFamily === "theocracy")) score -= 14;
   if (subject.neighbors?.includes(objectId)) score += 18;
   const trade = Accounts.getTrade(subjectId).partners.get(objectId);
   const tradeValue = (trade?.exports ?? 0) + (trade?.imports ?? 0);
@@ -782,12 +857,12 @@ function updateAIEconomicPolicies(playerId: number): void {
   }
 }
 
-export function advanceTurn(playerId: number): {turn: number; changes: string[]} {
+function simulateDay(playerId: number): {turn: number; changes: string[]} {
   stateById(playerId);
   const save = getOrCreateCampaign();
   if (!globalThis.pack.markets?.length) Markets.generate(true);
 
-  // This is Azgaar's real daily economy: production, purchases, sales, taxes, tariffs and public orders.
+  // Azgaar's native economy is recalculated once per in-game day.
   Production.regenerate();
 
   const changes: string[] = [];
@@ -797,7 +872,12 @@ export function advanceTurn(playerId: number): {turn: number; changes: string[]}
     save.funds[id] = Math.round(((save.funds[id] ?? STARTING_GRANT) + net) * 100) / 100;
     const accounts = Accounts.ofState(state.i);
     const prosperity = accounts?.prosperity ?? 0.5;
-    const growth = clamp(0.001 + (prosperity - 0.5) * 0.01, -0.004, 0.01);
+    const identity = getStateIdentity(state.i);
+    const cultureDevelopment = globalThis.pack.cultures?.[state.culture]?.development ?? 30;
+    const culturalEffect = (cultureDevelopment - 30) * 0.000015;
+    const religiousEffect = identity.religionShare > 0.8 ? 0.00012 : identity.religionShare < 0.3 ? -0.00008 : 0;
+    const governmentEffect = identity.governmentFamily === "clan" ? -0.00005 : identity.governmentFamily === "theocracy" ? 0.00005 : 0;
+    const growth = clamp(0.001 + (prosperity - 0.5) * 0.01 + culturalEffect + religiousEffect + governmentEffect, -0.004, 0.01);
     const oldPopulation = (state.rural ?? 0) + (state.urban ?? 0);
     if (oldPopulation > 0) {
       const rural = Math.max(0, (state.rural ?? 0) * (1 + growth * 0.8));
@@ -810,14 +890,17 @@ export function advanceTurn(playerId: number): {turn: number; changes: string[]}
     if (net < 0) changes.push(`${state.name} : déficit quotidien de ${formatMoney(Math.abs(net))}`);
   }
 
-  // City populations evolve independently, with a modest prosperity-sensitive rate.
+  // City growth is affected by local prosperity and the state's cultural development.
   for (const burg of globalThis.pack.burgs.filter(item => item?.i && !item.removed && item.state)) {
     const state = livingStates().find(item => item.i === burg.state);
     const population = burg.population ?? 0;
     if (!state || population <= 0) continue;
     const prosperity = Accounts.ofState(state.i)?.prosperity ?? 0.5;
+    const identity = getStateIdentity(state.i);
     const urbanProjects = save.projects.filter(project => project.kind === "urban_upgrade" && project.entityId === burg.i && project.stateId === state.i).length;
-    const growth = clamp(0.001 + (prosperity - 0.5) * 0.012 + urbanProjects * 0.0008, -0.006, 0.012);
+    const cultureDevelopment = globalThis.pack.cultures?.[state.culture]?.development ?? 30;
+    const identityEffect = (cultureDevelopment - 30) * 0.00001 + (identity.governmentFamily === "clan" ? -0.00005 : 0);
+    const growth = clamp(0.001 + (prosperity - 0.5) * 0.012 + urbanProjects * 0.0008 + identityEffect, -0.006, 0.012);
     const populationUnits = typeof options !== "undefined" ? options.map?.units?.population : undefined;
     if (populationUnits?.scale && populationUnits.urbanization?.rate) {
       const people = population * populationUnits.scale * populationUnits.urbanization.rate;
@@ -831,7 +914,29 @@ export function advanceTurn(playerId: number): {turn: number; changes: string[]}
   updateAIEconomicPolicies(playerId);
   updateAIDiplomacy(playerId);
   processWars();
-  addLog(`Tour ${save.turn - 1} terminé : production et commerce recalculés, fiscalité collectée, populations ajustées et diplomatie mise à jour.`);
+  addLog(`Jour ${save.turn - 1} : production, commerce, fiscalité, populations et diplomatie actualisés.`);
   persist();
   return {turn: save.turn, changes};
+}
+
+/** Advance the continuous campaign clock; one in-game day is simulated every 24 game hours. */
+export function advanceClock(playerId: number, elapsedHours: number): {elapsedHours: number; days: number; changes: string[]} {
+  stateById(playerId);
+  if (!Number.isFinite(elapsedHours) || elapsedHours <= 0) return {elapsedHours: getOrCreateCampaign().elapsedHours, days: 0, changes: []};
+  const save = getOrCreateCampaign();
+  const previousDay = Math.floor(save.elapsedHours / 24);
+  save.elapsedHours += Math.min(elapsedHours, 24 * 30);
+  const newDay = Math.floor(save.elapsedHours / 24);
+  const days = newDay - previousDay;
+  const changes: string[] = [];
+  for (let day = 0; day < days; day++) changes.push(...simulateDay(playerId).changes);
+  persist();
+  return {elapsedHours: save.elapsedHours, days, changes};
+}
+
+/** Compatibility helper for automated tests and old integrations; gameplay uses advanceClock. */
+export function advanceTurn(playerId: number): {turn: number; changes: string[]} {
+  const save = getOrCreateCampaign();
+  save.elapsedHours += 24;
+  return simulateDay(playerId);
 }
