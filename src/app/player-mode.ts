@@ -772,6 +772,12 @@ function renderAssistant(state: State): void {
   wrapper.append(makeButton("Ouvrir les réglages / l'assistant IA d'Azgaar", () => Controllers.Assistant.toggle()));
 }
 
+function applyCampaignLock(active: boolean): void {
+  document.body.classList.toggle("player-mode-campaign", active);
+  options.map.viewOnly = active;
+  const regenerate = document.getElementById("regenerate");
+  if (regenerate) regenerate.hidden = active;
+}
 function render(): void {
   if (!selector || !content) return;
   const states = getStates();
@@ -788,6 +794,7 @@ function render(): void {
   const lockedStateId = getPlayerStateId();
   if (lockedStateId === null) {
     selectedStateId = null;
+    applyCampaignLock(false);
     const controls = panel?.querySelector<HTMLElement>(".player-mode-controls");
     if (controls) controls.hidden = true;
     const chooser = el("div", "player-mode-page player-mode-start");
@@ -810,6 +817,7 @@ function render(): void {
       }
       setPlayerState(id);
       selectedStateId = id;
+      applyCampaignLock(true);
       const controls = panel?.querySelector<HTMLElement>(".player-mode-controls");
       if (controls) controls.hidden = true;
       render();
@@ -819,6 +827,7 @@ function render(): void {
     return;
   }
   selectedStateId = lockedStateId;
+  applyCampaignLock(true);
   const controls = panel?.querySelector<HTMLElement>(".player-mode-controls");
   if (controls) controls.hidden = true;
   selector.disabled = true;
@@ -911,6 +920,7 @@ export const PlayerMode = {
       if (!availableStates.length) return;
       const savedStateId = getPlayerStateId();
       selectedStateId = availableStates.some(candidate => candidate.i === savedStateId) ? savedStateId : null;
+      applyCampaignLock(selectedStateId !== null);
       render();
     });
 
