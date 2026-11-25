@@ -1002,47 +1002,34 @@ function render(): void {
 
 export const PlayerMode = {
   init(): void {
-    if (document.getElementById("playerModeToggle")) return;
+    if (document.getElementById("playerModePanel")) return;
     selectedStateId = getPlayerStateId();
 
-    const toggle = el("button", "player-mode-toggle", "⚑ JOUER");
-    toggle.id = "playerModeToggle";
-    toggle.type = "button";
-    toggle.setAttribute("aria-controls", "playerModePanel");
-    toggle.setAttribute("aria-expanded", "false");
-    toggle.addEventListener("click", () => this.toggle());
-
-    panel = el("aside", "player-mode-panel");
+    // This section lives inside Azgaar's real Tools tab; no floating replacement menu.
+    panel = el("section", "player-mode-panel player-mode-inline");
     panel.id = "playerModePanel";
-    panel.setAttribute("aria-label", "Mode joueur");
-    panel.hidden = true;
+    panel.setAttribute("aria-label", "Gestion de la campagne");
+    panel.hidden = false;
 
     const header = el("div", "player-mode-header");
     const heading = el("div", "player-mode-heading");
     heading.append(
-      el("span", "player-mode-eyebrow", "AZGAAR • STRATÉGIE"),
-      el("h2", "", "Mode joueur"),
-      el("p", "", "Dirige un État, investis et fais évoluer ta carte.")
+      el("span", "player-mode-eyebrow", "AZGAAR • CAMPAGNE"),
+      el("h2", "", "Gestion de la partie"),
+      el("p", "", "La carte reste l’espace de jeu. Clique directement sur une ville ou un territoire.")
     );
     const headerActions = el("div", "player-mode-header-actions");
-    const turn = makeButton("Tour suivant", () => {
-      if (selectedStateId !== null) callAdvanceTurn(selectedStateId);
-    }, "player-mode-header-turn");
-    const close = el("button", "player-mode-close", "×");
-    close.type = "button";
-    close.setAttribute("aria-label", "Fermer le mode joueur");
-    close.addEventListener("click", () => this.toggle());
-    headerActions.append(turn, close);
+    clockOutput = el("strong", "player-mode-clock", "Jour 1 · 00:00");
+    pauseButton = makeButton("▶ Reprendre", toggleGamePause, "player-mode-header-turn");
+    speedButton = makeButton("Vitesse ×1", cycleGameSpeed, "player-mode-header-turn");
+    const sandbox = makeButton("↩ Sandbox", returnToSandbox, "player-mode-sandbox");
+    headerActions.append(clockOutput, pauseButton, speedButton, sandbox);
     header.append(heading, headerActions);
 
     const controls = el("div", "player-mode-controls");
     const selectLabel = el("label", "", "État dirigé");
     selector = el("select", "player-mode-select");
     selector.disabled = true;
-    selector.addEventListener("change", () => {
-      // The player nation is immutable after campaign creation.
-      render();
-    });
     selectLabel.append(selector);
     controls.append(selectLabel);
 
@@ -1063,26 +1050,32 @@ export const PlayerMode = {
     content = el("div", "player-mode-content");
     panel.append(header, controls, nav, content);
     const host = document.getElementById("toolsContent") ?? document.body;
-    host.prepend(toggle, panel);
+    host.prepend(panel);
 
-    // The shell boots before the first map is generated or loaded.
-    // registerMap dispatches this event after both operations, so attach the player state then.
+    window.addEventListener("azgaar:map-click", handleMapClick);
     window.addEventListener("map:generated", () => {
       const availableStates = getStates();
       if (!availableStates.length) return;
       const savedStateId = getPlayerStateId();
       selectedStateId = availableStates.some(candidate => candidate.i === savedStateId) ? savedStateId : null;
+      selectedCellId = null;
+      selectedBurgId = null;
+      selectedMapStateId = null;
       applyCampaignLock(selectedStateId !== null);
-      if (selectedStateId !== null) openNativePlayerMenu();
+      if (selectedStateId !== null) startSimulationTimer();
       render();
     });
 
+    if (selectedStateId !== null) {
+      campaignActive = true;
+      gamePaused = false;
+      applyCampaignLock(true);
+    }
+    startSimulationTimer();
     render();
   },
   toggle(): void {
-    if (!panel) return;
-    panel.hidden = !panel.hidden;
-    document.getElementById("playerModeToggle")?.setAttribute("aria-expanded", String(!panel.hidden));
-    if (!panel.hidden) render();
+    document.getElementById("toolsTab")?.click();
+    panel?.scrollIntoView({block: "start"});
   }
 };
