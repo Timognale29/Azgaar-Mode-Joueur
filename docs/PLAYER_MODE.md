@@ -30,10 +30,15 @@ Les prix sont débités avant la réalisation. Un projet qui ne peut pas être f
 | --- | ---: |
 | Dotation initiale de campagne | 1 500 par État |
 | Construire un marché | 260 + 0,08 par habitant de la ville |
+| Entretien d'un marché | 4 par tour |
 | Construire une route | 90 + 1,8 par unité de longueur terrestre du tracé |
+| Entretien d'une route | 0,08 par unité de longueur, minimum 1 par tour |
 | Mission diplomatique (alliance, commerce ou paix) | 65 |
 | Mobilisation pour déclarer un conflit | 240 |
+| Entretien militaire | 35 + 0,8 × racine carrée de la population en points, plafonné à 180 par camp et par tour |
 | Mise en place d'un embargo | 85 |
+
+Les frais d'entretien peuvent faire passer le trésor en négatif : cette dette bloque les nouveaux chantiers tant que les fonds ne sont pas revenus au-dessus du coût demandé.
 
 Les travaux créent des données réelles dans la carte : les marchés sont ajoutés au modèle commercial et les routes sont ajoutées au réseau de transport utilisé pour calculer les coûts d'acheminement.
 
@@ -69,7 +74,9 @@ Les alliances et les accords commerciaux retirent les tarifs ciblés entre les d
 
 ## Assistant
 
-L'onglet **Assistant** propose un interpréteur local d'ordres en français. Il accepte notamment :
+L'onglet **Assistant** propose un interpréteur local d'ordres en français. Quand un fournisseur IA est déjà connecté dans l'assistant Azgaar, il propose aussi un conseiller génératif capable d'utiliser une liste fermée d'outils de campagne (lecture du trésor, fin de tour, construction, fiscalité, budget, négociation et embargo). Il ne peut pas exécuter de code arbitraire.
+
+Le conseiller utilise la clé et le fournisseur enregistrés dans le navigateur par Azgaar. Les fournisseurs externes peuvent facturer leurs requêtes ; une connexion ChatGPT Plus n'est pas une clé API OpenAI. Ne partage pas de clé API dans la conversation.
 
 - `construis un marché à [ville]`
 - `construis une route entre [ville] et [ville]`
@@ -84,11 +91,11 @@ L'onglet **Assistant** propose un interpréteur local d'ordres en français. Il 
 - `fin du tour`
 - `aide`
 
-Il s'agit d'un interpréteur contrôlé (il n'exécute pas du code libre et ne modifie que les actions prévues). Le bouton **Ouvrir l'assistant IA intégré d'Azgaar** ouvre l'assistant existant d'Azgaar, qui dépend de la configuration de fournisseur déjà proposée par cette application. Cette version n'ajoute pas de connexion OAuth à un compte ChatGPT.
+Le mode hors ligne reste disponible si aucun fournisseur n'est connecté. Le bouton de réglages ouvre l'assistant existant d'Azgaar ; cette version ne met pas en place de connexion OAuth à un compte ChatGPT.
 
 ## Sauvegarde et limites connues
 
 - Les modifications de carte (routes, marchés, taxes, budgets, relations) font partie des données Azgaar : utiliser le bouton **Save** d'Azgaar pour enregistrer le fichier `.map`.
-- Les données de campagne (tour, trésor de partie, traités et chronique du mode joueur) sont actuellement enregistrées dans le stockage local du navigateur. Elles ne sont pas encore incorporées au fichier `.map` et ne suivent donc pas automatiquement la carte sur un autre navigateur ou appareil.
-- La carte et la campagne n'ont pas encore de système de combat tactique, de pertes militaires, de diplomatie multijoueur ou de synchronisation en ligne.
-- Le projet doit encore être testé en situation réelle dans le navigateur avec plusieurs cartes et des parties longues.
+- Les données de campagne (tour, trésors, traités, guerres, projets et chronique) sont enregistrées dans le stockage local du navigateur. Le tableau de bord permet aussi d'exporter puis d'importer une sauvegarde JSON, à utiliser avec le même fichier de carte. La sauvegarde de campagne et le fichier `.map` restent deux fichiers distincts.
+- Les conflits sont résolus par un score abstrait : il n'y a pas de combat tactique, de pertes d'unités, de déplacement de fronts, de multijoueur ni de synchronisation en ligne.
+- La suite de tests automatisés comprend les tests de coûts, de construction, de tours, de conflits et de sauvegarde ; un test visuel complet dans un vrai navigateur et des scénarios de parties longues restent nécessaires.
