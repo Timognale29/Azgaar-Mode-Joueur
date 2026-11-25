@@ -8,6 +8,7 @@ import type { Burg } from "@/model/political/burgs-generator";
 import type { State } from "@/model/political/states-generator";
 import {
   advanceClock,
+  clearStateIdentityCache,
   getStateIdentity,
   buildMarket,
   buildRoad,
@@ -211,6 +212,7 @@ function returnToSandbox(): void {
 }
 function resumeCampaign(): void {
   if (getPlayerStateId() === null) return;
+  clearStateIdentityCache();
   selectedStateId = getPlayerStateId();
   gamePaused = false;
   applyCampaignLock(true);
@@ -1061,6 +1063,7 @@ export const PlayerMode = {
 
     window.addEventListener("azgaar:map-click", handleMapClick);
     window.addEventListener("map:generated", () => {
+      clearStateIdentityCache();
       const availableStates = getStates();
       if (!availableStates.length) return;
       const savedStateId = getPlayerStateId();
