@@ -895,11 +895,16 @@ function openNativePlayerMenu(): void {
   document.getElementById("toolsTab")?.click();
 }
 function applyCampaignLock(active: boolean): void {
+  if (active && !campaignActive) previousViewOnly = Boolean(options.map.viewOnly);
+  if (!active && campaignActive) options.map.viewOnly = previousViewOnly;
+  if (active) options.map.viewOnly = true;
+  campaignActive = active;
   document.body.classList.toggle("player-mode-campaign", active);
-  options.map.viewOnly = active;
-  const regenerate = document.getElementById("regenerate");
-  if (regenerate) regenerate.hidden = active;
+  if (active) gamePaused = false;
+  else gamePaused = true;
+  updateClockDisplay();
 }
+
 function render(): void {
   if (!selector || !content) return;
   const states = getStates();
@@ -908,11 +913,10 @@ function render(): void {
   if (!states.length) {
     selector.disabled = true;
     selector.append(new Option("Aucun État détecté", ""));
-    content.replaceChildren(el("div", "player-mode-empty", "Charge ou génère une carte comportant des États, puis rouvre le mode joueur."));
+    content.replaceChildren(el("div", "player-mode-empty", "Charge ou génère une carte comportant des États, puis ouvre l’onglet Outils."));
     return;
   }
 
-  selector.disabled = false;
   const lockedStateId = getPlayerStateId();
   if (lockedStateId === null) {
     selectedStateId = null;
@@ -920,41 +924,64 @@ function render(): void {
     const controls = panel?.querySelector<HTMLElement>(".player-mode-controls");
     if (controls) controls.hidden = true;
     const chooser = el("div", "player-mode-page player-mode-start");
-    chooser.append(sectionTitle("Choisis ton pays", "Ce choix définit ta campagne : tu garderas cet État pendant toute la partie."));
+    chooser.append(sectionTitle("Choisis ton pays", "La sélection se fait ici, avant de commencer. Ce pays restera le tien pendant la campagne."));
     const countrySelect = el("select", "player-mode-select");
-    countrySelect.append(new Option("Choisir un État…", ""));
+    countrySelect.append(new Option("— Sélectionner un État —", ""));
     for (const candidate of states) countrySelect.append(new Option(candidate.fullName ?? candidate.name, String(candidate.i)));
-    const preview = el("p", "player-mode-note", "Sélectionne un pays pour afficher sa capitale, sa population et son trésor de départ.");
+    const preview = el("div", "player-mode-country-preview");
+    preview.textContent = "Choisis un pays pour voir sa capitale, sa population, son gouvernement, sa culture et sa religion.";
     countrySelect.addEventListener("change", () => {
       const candidate = states.find(item => item.i === Number(countrySelect.value));
-      preview.textContent = candidate
-        ? (candidate.fullName ?? candidate.name) + " · " + number((candidate.rural ?? 0) + (candidate.urban ?? 0)) + " habitants · capitale : " + (globalThis.pack.burgs[candidate.capital]?.name ?? "non renseignée")
-        : "Sélectionne un pays pour afficher ses informations.";
+      if (!candidate) {
+        preview.textContent = "Choisis un pays pour afficher ses caractéristiques.";
+        return;
+      }
+      const identity = getStateIdentity(candidate.i);
+      preview.replaceChildren(
+        row("Capitale", globalThis.pack.burgs[candidate.capital]?.name ?? "Non renseignée"),
+        row("Population", number((candidate.rural ?? 0) + (candidate.urban ?? 0))),
+        row("Gouvernement", identity.government),
+        row("Culture", identity.cultureName + " · " + identity.cultureType),
+        row("Religion", identity.religionName)
+      );
     });
     const start = makeButton("Commencer la campagne", () => {
       const id = Number(countrySelect.value);
       if (!states.some(item => item.i === id)) {
-        preview.textContent = "Choisis un État avant de commencer.";
+        preview.textContent = "Sélection obligatoire : choisis un État avant de commencer.";
         return;
       }
       setPlayerState(id);
       selectedStateId = id;
+      gamePaused = false;
       applyCampaignLock(true);
       openNativePlayerMenu();
-      const controls = panel?.querySelector<HTMLElement>(".player-mode-controls");
-      if (controls) controls.hidden = true;
+      startSimulationTimer();
       render();
     }, "player-mode-primary");
     chooser.append(countrySelect, preview, start);
     content.replaceChildren(chooser);
+    updateClockDisplay();
     return;
   }
+
   selectedStateId = lockedStateId;
-  applyCampaignLock(true);
+  selector.disabled = true;
+  const playerState = states.find(item => item.i === lockedStateId);
+  selector.replaceChildren(new Option(playerState?.fullName ?? playerState?.name ?? "État dirigé", String(lockedStateId)));
   const controls = panel?.querySelector<HTMLElement>(".player-mode-controls");
   if (controls) controls.hidden = true;
-  selector.disabled = true;
-  selector.replaceChildren(new Option(getStates().find(item => item.i === lockedStateId)?.fullName ?? getStates().find(item => item.i === lockedStateId)?.name ?? "État dirigé", String(lockedStateId)));
+
+  if (!campaignActive) {
+    const sandbox = el("div", "player-mode-page player-mode-start");
+    sandbox.append(sectionTitle("Sandbox", "La campagne est conservée, mais les outils originaux d’Azgaar sont de nouveau disponibles."));
+    sandbox.append(row("Campagne enregistrée", playerState?.name ?? "État joueur"));
+    sandbox.append(makeButton("Reprendre la campagne", resumeCampaign, "player-mode-primary"));
+    content.replaceChildren(sandbox);
+    updateClockDisplay();
+    return;
+  }
+
   const state = getSelectedState();
   if (!state) return;
   for (const button of tabButtons) {
@@ -970,6 +997,7 @@ function render(): void {
   else if (activeTab === "construction") renderConstruction(state);
   else if (activeTab === "assistant") renderAssistant(state);
   else renderOverview(state);
+  updateClockDisplay();
 }
 
 export const PlayerMode = {
