@@ -384,8 +384,12 @@ function updateAIDiplomacy(playerId: number): void {
       let object = states[j];
       if (subject.i === playerId) [subject, object] = [object, subject];
       const current = subject.diplomacy?.[object.i] ?? "Neutral";
-      if (current === "Enemy") continue; // the AI does not end a war without negotiations
+      if (current === "Enemy" || current === "Vassal" || current === "Suzerain") continue;
       const score = relationScore(subject.i, object.i);
+      if (current === "Ally" && score >= 8) continue;
+      if (current === "Friendly" && score >= 8) continue;
+      if (current === "Rival" && score <= -8) continue;
+      if (current === "Suspicion" && score <= -3) continue;
       const next = score >= 54 ? "Ally" : score >= 20 ? "Friendly" : score <= -27 ? "Rival" : score <= -8 ? "Suspicion" : "Neutral";
       if (next !== current) {
         States.setRelation(subject.i, object.i, next);
@@ -397,6 +401,42 @@ function updateAIDiplomacy(playerId: number): void {
 }
 export function getAttitude(fromId: number, toId: number): string {
   return stateById(fromId).diplomacy?.[toId] ?? "Neutral";
+}
+
+function updateAIEconomicPolicies(playerId: number): void {
+  for (const state of livingStates()) {
+    if (state.i === playerId) continue;
+    const finance = state.economy;
+    const accounts = Accounts.ofState(state.i);
+    const prosperity = accounts?.prosperity ?? 0.5;
+    const currentSalesTax = finance.salesTax;
+    const currentPollTax = finance.pollTax;
+    const changes: Partial<Record<"court" | "administration" | "infrastructure" | "military", number>> = {};
+    let salesTax = currentSalesTax;
+    let pollTax = currentPollTax;
+    const atWar = (state.diplomacy ?? []).includes("Enemy");
+
+    if (finance.treasury < -20) {
+      salesTax = Math.min(0.25, salesTax + 0.005);
+      pollTax = Math.min(2, pollTax + 0.01);
+      changes.court = Math.max(0, finance.budget.court - 2);
+      changes.administration = Math.max(0, finance.budget.administration - 1);
+      if (!atWar) changes.military = Math.max(0, finance.budget.military - 2);
+    } else if (prosperity < 0.4 && finance.treasury > 0) {
+      changes.infrastructure = Math.min(100, finance.budget.infrastructure + 3);
+      salesTax = Math.max(0, salesTax - 0.002);
+    } else if (finance.treasury > 100 && prosperity > 0.65) {
+      salesTax = Math.max(0, salesTax - 0.002);
+    }
+
+    if (atWar) changes.military = Math.min(100, Math.max(changes.military ?? finance.budget.military, finance.budget.military + 3));
+    const taxChanged = salesTax !== currentSalesTax || pollTax !== currentPollTax;
+    const budgetChanged = Object.entries(changes).some(([key, value]) => value !== finance.budget[key as keyof typeof finance.budget]);
+    if (taxChanged) States.setTaxes(state.i, salesTax, pollTax);
+    if (budgetChanged) States.setBudget(state.i, changes);
+    if (taxChanged || budgetChanged)
+      addLog("Le gouvernement de " + state.name + " ajuste sa fiscalité ou son budget en réaction à sa situation économique.");
+  }
 }
 
 export function advanceTurn(playerId: number): {turn: number; changes: string[]} {
@@ -428,6 +468,7 @@ export function advanceTurn(playerId: number): {turn: number; changes: string[]}
   }
 
   save.turn++;
+  updateAIEconomicPolicies(playerId);
   updateAIDiplomacy(playerId);
   addLog(`Tour ${save.turn - 1} terminé : production et commerce recalculés, fiscalité collectée, populations ajustées et diplomatie mise à jour.`);
   persist();
