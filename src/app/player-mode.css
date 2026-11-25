@@ -284,3 +284,45 @@
     max-height: none;
   }
 }
+
+/* V2 strategy command centre */
+.player-mode-panel {
+  width: min(680px, calc(100vw - 24px));
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  background: #f3efe4;
+  border: 1px solid #a99a78;
+  border-radius: 12px;
+}
+.player-mode-header { align-items: center; padding: 16px 18px; }
+.player-mode-heading h2 { font-size: 24px; letter-spacing: -.025em; }
+.player-mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  padding: 7px 12px 10px;
+  background: #e8e2d5;
+  border-bottom: 1px solid #d4cbb9;
+}
+.player-mode-tabs button {
+  min-width: 0;
+  min-height: 40px;
+  padding: 6px 3px;
+  border-radius: 6px;
+  font-size: 10px;
+}
+.player-mode-tabs button.active { border: 0; color: #fffdf8; background: #334b40; }
+.player-mode-content { padding: 14px 18px 22px; }
+.player-mode-stat-value { font-size: 22px; font-variant-numeric: tabular-nums; }
+.player-mode-card { padding: 14px; border-radius: 9px; box-shadow: 0 1px 2px rgb(40 35 25 / 5%); }
+.player-mode-city-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); justify-items: stretch; width: min(360px, 58%); }
+.player-mode-city-actions .player-mode-action { white-space: normal; min-height: 34px; }
+.player-mode-list-item { align-items: flex-start; }
+.player-mode-primary { min-height: 38px; }
+@media (max-width: 680px) {
+  .player-mode-panel { inset: 6px; width: auto; }
+  .player-mode-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .player-mode-city-actions { width: 100%; grid-template-columns: 1fr; }
+  .player-mode-list-item { flex-direction: column; }
+}
