@@ -8,7 +8,11 @@ const mocks = vi.hoisted(() => ({
   setBudget: vi.fn(),
   setTariffs: vi.fn(),
   setRelation: vi.fn(),
-  setPopulation: vi.fn()
+  setPopulation: vi.fn(),
+  militaryAdd: vi.fn(),
+  militarySetUnits: vi.fn(),
+  militaryMove: vi.fn(),
+  militarySetBase: vi.fn()
 }));
 
 vi.mock("@/model/economy/accounts", () => ({
@@ -36,6 +40,15 @@ vi.mock("@/model/political/states-generator", () => ({
     setPopulation: mocks.setPopulation
   }
 }));
+vi.mock("@/model/political/military-generator", () => ({
+  Military: {
+    add: mocks.militaryAdd,
+    getTroops: (points = 0) => Math.ceil(points),
+    setUnits: mocks.militarySetUnits,
+    move: mocks.militaryMove,
+    setBase: mocks.militarySetBase
+  }
+}));
 
 import {
   advanceClock,
@@ -51,7 +64,10 @@ import {
   getFunds,
   getWarsForState,
   importCampaignData,
-  negotiate
+  negotiate,
+  raiseRegiment,
+  recruitRegiment,
+  moveRegiment
 } from "./player-mode-engine";
 
 let mapNumber = 0;
@@ -104,11 +120,29 @@ function setupMap(): void {
     markets: [],
     routes: [],
     deals: [],
-    cells: {i: [], state: [], h: [], pop: [], p: [], c: [], biome: [], routes: []},
-    biomes: [],
+    cells: {
+      i: [0, 1],
+      state: [1, 0],
+      h: [30, 30],
+      pop: [0, 0],
+      p: [[100, 100], [120, 100]],
+      c: [[1], [0]],
+      biome: [0, 0],
+      burg: [1, 2],
+      routes: [{}, {}]
+    },
+    biomes: [{habitability: 100}],
     provinces: []
   } as any;
-  globalThis.options = {map: {seed: "player-mode-test-" + ++mapNumber, goods: []}} as any;
+  globalThis.options = {
+    map: {
+      seed: "player-mode-test-" + ++mapNumber,
+      goods: [],
+      graph: {width: 1000, height: 800},
+      units: {population: {scale: 1, urbanization: {rate: 1}}},
+      military: {units: [{name: "infantry", power: 1}]}
+    }
+  } as any;
 
   mocks.addMarket.mockImplementation((burgId: number) => {
     const id = Math.max(0, ...pack.markets.map((market: any) => market.i)) + 1;
@@ -133,6 +167,28 @@ function setupMap(): void {
   mocks.setPopulation.mockImplementation((stateId: number, rural: number, urban: number) => {
     pack.states[stateId]!.rural = rural;
     pack.states[stateId]!.urban = urban;
+  });
+  mocks.militaryAdd.mockImplementation((stateId: number, x: number, y: number) => {
+    const state = pack.states[stateId]!;
+    state.military ??= [];
+    const i = state.military.length ? Math.max(...state.military.map((regiment: any) => regiment.i)) + 1 : 0;
+    state.military.push({i, a: 0, cell: 0, x, y, bx: x, by: y, state: stateId, n: 0, u: {}, name: "Aster Guard"} as any);
+    return i;
+  });
+  mocks.militarySetUnits.mockImplementation((stateId: number, regimentId: number, units: Record<string, number>) => {
+    const regiment = pack.states[stateId]!.military!.find((item: any) => item.i === regimentId)!;
+    regiment.u = Object.fromEntries(Object.entries(units).map(([name, count]) => [name, count]));
+    regiment.a = Object.values(units).reduce((total, count) => total + count, 0);
+  });
+  mocks.militaryMove.mockImplementation((stateId: number, regimentId: number, x: number, y: number) => {
+    const regiment = pack.states[stateId]!.military!.find((item: any) => item.i === regimentId)!;
+    regiment.x = x;
+    regiment.y = y;
+  });
+  mocks.militarySetBase.mockImplementation((stateId: number, regimentId: number, x: number, y: number) => {
+    const regiment = pack.states[stateId]!.military!.find((item: any) => item.i === regimentId)!;
+    regiment.bx = x;
+    regiment.by = y;
   });
   mocks.productionRegenerate.mockImplementation(() => {
     for (const state of pack.states) if (state.i) state.economy.treasury = 120;
@@ -295,6 +351,56 @@ describe("player mode campaign engine", () => {
     });
     expect(getStateIdentity(2).governmentFamily).toBe("clan");
     expect(relationScore(1, 2)).toBeLessThan(0);
+  });
+
+  it("raises a regiment at the capital and charges the treasury", () => {
+    const initialFunds = getFunds(1);
+    const regiment = raiseRegiment(1);
+
+    expect(regiment.state).toBe(1);
+    expect(regiment.x).toBe(100);
+    expect(regiment.y).toBe(100);
+    expect(getFunds(1)).toBe(initialFunds - 90);
+    expect(pack.states[1]!.military).toHaveLength(1);
+  });
+
+  it("charges recruitment and updates the real regiment composition", () => {
+    const regiment = raiseRegiment(1);
+    const before = getFunds(1);
+    const cost = recruitRegiment(1, regiment.i, "infantry", 100);
+
+    expect(cost).toBe(77);
+    expect(regiment.u.infantry).toBe(100);
+    expect(regiment.a).toBe(100);
+    expect(getFunds(1)).toBe(before - cost);
+  });
+
+  it("refuses recruitment into a foreign regiment without charging", () => {
+    const before = getFunds(1);
+    expect(() => recruitRegiment(2, 99, "infantry", 100)).toThrow("régiment");
+    expect(getFunds(1)).toBe(before);
+  });
+
+  it("moves a regiment to neutral land and charges a distance-based order", () => {
+    const regiment = raiseRegiment(1);
+    const before = getFunds(1);
+    const cost = moveRegiment(1, regiment.i, 1);
+
+    expect(cost).toBe(8);
+    expect(regiment.cell).toBe(1);
+    expect(regiment.x).toBe(120);
+    expect(regiment.y).toBe(100);
+    expect(getFunds(1)).toBe(before - cost);
+  });
+
+  it("refuses a move into foreign territory without charging", () => {
+    const regiment = raiseRegiment(1);
+    pack.cells.state[1] = 2;
+    const before = getFunds(1);
+
+    expect(() => moveRegiment(1, regiment.i, 1)).toThrow("allié");
+    expect(getFunds(1)).toBe(before);
+    expect(regiment.cell).toBe(0);
   });
 
   it("charges initial war mobilization, recurring upkeep and advances the abstract war", () => {
