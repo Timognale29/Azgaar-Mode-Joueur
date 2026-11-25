@@ -128,7 +128,7 @@ function applyCampaignMode(active: boolean): void {
     pendingMove = null;
   }
   if (active) {
-    options.map.viewOnly = false; // preserve Azgaar's native click-to-open editors
+    options.map.viewOnly = true; // block free editing; allowed native editors are opened explicitly from map clicks
     paused = false;
   }
   campaignActive = active;
