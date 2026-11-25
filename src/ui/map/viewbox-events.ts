@@ -101,12 +101,18 @@ export function openEditor(element: Element): boolean {
 }
 
 function onClick(event: MouseEvent): void {
-  window.dispatchEvent(new CustomEvent<MouseEvent>("azgaar:map-click", {detail: event}));
+  const campaignClick = new CustomEvent<MouseEvent>("azgaar:map-click", {detail: event, cancelable: true});
+  window.dispatchEvent(campaignClick);
+  if (campaignClick.defaultPrevented) return;
   if (event?.target && !options.map.viewOnly) openEditor(event.target as Element);
 }
 
 /** Right-click on the map belongs to the context menu; Shift+right-click keeps the browser's own */
 function onContextMenu(event: MouseEvent): void {
+  if (document.body.classList.contains("player-mode-campaign")) {
+    event.preventDefault();
+    return;
+  }
   if (event.shiftKey || options.app.mode || options.map.viewOnly) return;
   event.preventDefault();
   Controllers.ContextMenu.open(event);
