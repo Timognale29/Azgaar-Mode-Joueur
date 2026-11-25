@@ -38,7 +38,10 @@ vi.mock("@/model/political/states-generator", () => ({
 }));
 
 import {
+  advanceClock,
   advanceTurn,
+  getStateIdentity,
+  relationScore,
   buildMarket,
   buildRoad,
   buildCityFortification,
@@ -243,16 +246,55 @@ describe("player mode campaign engine", () => {
     expect(pack.routes).toHaveLength(0);
   });
 
-  it("runs Azgaar production and advances population and the campaign balance", () => {
+  it("runs production only when the continuous clock crosses a full day", () => {
     const initialFunds = getFunds(1);
     const initialPopulation = pack.states[1]!.rural! + pack.states[1]!.urban!;
 
-    const result = advanceTurn(1);
+    const firstHalf = advanceClock(1, 12);
+    expect(firstHalf.days).toBe(0);
+    expect(mocks.productionRegenerate).not.toHaveBeenCalled();
+    expect(getFunds(1)).toBe(initialFunds);
 
+    const secondHalf = advanceClock(1, 12);
+    expect(secondHalf.days).toBe(1);
     expect(mocks.productionRegenerate).toHaveBeenCalledOnce();
-    expect(result.turn).toBe(2);
+    expect(getCampaign().turn).toBe(2);
+    expect(getCampaign().elapsedHours).toBe(24);
     expect(getFunds(1)).toBe(initialFunds + 120);
     expect(pack.states[1]!.rural! + pack.states[1]!.urban!).toBeGreaterThan(initialPopulation);
+  });
+
+  it("uses map culture, religion and government data in state identity and diplomacy", () => {
+    pack.states[1]!.form = "Theocracy";
+    pack.states[1]!.formName = "Theocracy";
+    pack.states[2]!.form = "Anarchy";
+    pack.states[2]!.formName = "Clans Union";
+    pack.cultures = [
+      {},
+      {i: 1, name: "Asteri", type: "River", ancestry: "Aster", development: 60},
+      {i: 2, name: "Boreal", type: "Nomadic", ancestry: "Boreal", development: 25}
+    ] as any;
+    pack.religions = [
+      {},
+      {i: 1, name: "Faith of the Dawn", type: "Organized"},
+      {i: 2, name: "Ancestor Spirits", type: "Folk"}
+    ] as any;
+    pack.cells = {
+      ...pack.cells,
+      state: [1, 1, 2, 2],
+      religion: [1, 1, 2, 2],
+      pop: [20, 80, 75, 25]
+    } as any;
+
+    expect(getStateIdentity(1)).toMatchObject({
+      cultureName: "Asteri",
+      cultureType: "River",
+      religionName: "Faith of the Dawn",
+      religionShare: 1,
+      governmentFamily: "theocracy"
+    });
+    expect(getStateIdentity(2).governmentFamily).toBe("clan");
+    expect(relationScore(1, 2)).toBeLessThan(0);
   });
 
   it("charges initial war mobilization, recurring upkeep and advances the abstract war", () => {
