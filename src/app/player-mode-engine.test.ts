@@ -177,6 +177,51 @@ describe("player mode campaign engine", () => {
     expect(getCampaign().projects).toHaveLength(0);
   });
 
+  it("builds a route only across own or neutral land and charges its length-based cost", () => {
+    pack.burgs.push({i: 3, name: "Seconde", state: 1, cell: 2, population: 80, feature: 1});
+    pack.cells = {
+      i: [0, 1, 2],
+      state: [1, 0, 1],
+      h: [30, 30, 30],
+      p: [[0, 0], [10, 0], [20, 0]],
+      c: [[1], [0, 2], [1]],
+      biome: [0, 0, 0],
+      routes: [{}, {}, {}]
+    };
+    pack.biomes = [{habitability: 100}];
+    const initialFunds = getFunds(1);
+
+    const cost = buildRoad(1, 3, 1);
+
+    expect(cost).toBe(126);
+    expect(getFunds(1)).toBe(initialFunds - cost);
+    expect(pack.routes).toHaveLength(1);
+    expect(pack.routes[0].cells).toEqual([0, 1, 2]);
+    expect(pack.routes[0].tags).toContain("owner:1");
+    expect(getCampaign().projects[0]).toMatchObject({kind: "road", stateId: 1, entityId: 1, upkeep: 1.6});
+    expect(pack.cells.routes[0][1]).toBe(1);
+    expect(pack.cells.routes[2][1]).toBe(1);
+  });
+
+  it("refuses to route through a foreign state's land without charging", () => {
+    pack.burgs.push({i: 3, name: "Seconde", state: 1, cell: 2, population: 80, feature: 1});
+    pack.cells = {
+      i: [0, 1, 2],
+      state: [1, 2, 1],
+      h: [30, 30, 30],
+      p: [[0, 0], [10, 0], [20, 0]],
+      c: [[1], [0, 2], [1]],
+      biome: [0, 0, 0],
+      routes: [{}, {}, {}]
+    };
+    pack.biomes = [{habitability: 100}];
+    const initialFunds = getFunds(1);
+
+    expect(() => buildRoad(1, 3, 1)).toThrow("Aucun chemin terrestre praticable");
+    expect(getFunds(1)).toBe(initialFunds);
+    expect(pack.routes).toHaveLength(0);
+  });
+
   it("runs Azgaar production and advances population and the campaign balance", () => {
     const initialFunds = getFunds(1);
     const initialPopulation = pack.states[1].rural + pack.states[1].urban;
