@@ -226,3 +226,23 @@
   .player-mode-action-grid { grid-template-columns: 1fr; }
   .player-mode-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
+
+.player-mode-war {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0;
+  border-bottom: 1px solid #ded7c8;
+}
+.player-mode-war:last-child { border-bottom: 0; }
+.player-mode-war-track {
+  height: 9px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #d7b3a8 0 50%, #d8dfd7 50% 100%);
+}
+.player-mode-war-fill {
+  height: 100%;
+  border-right: 2px solid #263b36;
+  background: #6b8b70;
+  transition: width .2s ease;
+}
