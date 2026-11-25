@@ -507,7 +507,7 @@ function getGovernmentFamily(state: State): StateIdentitySummary["governmentFami
   if (/republic|commune|council|federat|confeder|union|oligarch|democr|junta|city-state|free city|trade company/.test(words)) return "republic";
   if (/kingdom|monarch|empire|duchy|duke|principality|sultanate|emirate|satrap|shogun|tsardom|dominion|march|beylik|despotate|viceroyalty/.test(words)) return "monarchy";
   if (state.form === "Theocracy") return "theocracy";
-  if (state.form === "Union") return "clan";
+  if (state.form === "Union") return "republic";
   if (state.form === "Republic") return "republic";
   if (state.form === "Monarchy") return "monarchy";
   return "other";
