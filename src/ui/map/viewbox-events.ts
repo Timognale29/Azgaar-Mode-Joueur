@@ -101,6 +101,7 @@ export function openEditor(element: Element): boolean {
 }
 
 function onClick(event: MouseEvent): void {
+  window.dispatchEvent(new CustomEvent<MouseEvent>("azgaar:map-click", {detail: event}));
   if (event?.target && !options.map.viewOnly) openEditor(event.target as Element);
 }
 
