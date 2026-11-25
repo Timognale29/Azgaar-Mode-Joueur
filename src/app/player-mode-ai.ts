@@ -11,6 +11,7 @@ import {
   setTaxes
 } from "./player-mode-engine";
 import { get, isConnected } from "@/services/assistant/provider/connection";
+import { Layers } from "@/renderers/layers";
 import {
   complete,
   type Message,
@@ -216,6 +217,7 @@ export async function askPlayerAI(
     const results = calls.map(call => {
       try {
         const outcome = executeTool(call.name, call.input, stateId);
+        if (call.name !== "read_government") Layers.drawAll();
         return {type: "tool_result" as const, tool_use_id: call.id, content: outcome};
       } catch (error) {
         return {
