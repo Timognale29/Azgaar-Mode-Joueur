@@ -47,10 +47,18 @@ function editRegiment(selector: string): void {
     onClose: closeEditor,
     position: { my: "left top", at: "left+10 top+10", of: "#map" }
   });
+  window.dispatchEvent(new CustomEvent("azgaar:regiment-editor-open", {
+    detail: {stateId: regiment.state, regimentId: regiment.i}
+  }));
 }
 
 function bindRegiments(): void {
   const armies = select<SVGGElement, unknown>("#armies");
+  if (document.body.classList.contains("player-mode-campaign")) {
+    armies.selectAll(":scope > g").classed("draggable", false);
+    armies.selectAll<SVGGElement, unknown>(":scope > g > g").call(drag<SVGGElement, unknown>().on("drag", null));
+    return;
+  }
   armies.selectAll(":scope > g").classed("draggable", true);
   armies.selectAll<SVGGElement, unknown>(":scope > g > g").call(drag<SVGGElement, unknown>().on("drag", dragRegiment));
 }
