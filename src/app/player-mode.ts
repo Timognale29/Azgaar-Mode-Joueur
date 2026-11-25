@@ -1,5 +1,6 @@
 import type {} from "@/model/globals";
 import "./player-mode.css";
+import { Controllers } from "@/controllers";
 import { Layers } from "@/renderers/layers";
 import type { Burg } from "@/model/political/burgs-generator";
 import type { State } from "@/model/political/states-generator";
@@ -260,7 +261,7 @@ function renderCities(state: State): void {
     const market = globalThis.pack.markets.some(entry => entry.centerBurgId === burg.i);
     const cityActions = el("div", "player-mode-city-actions");
     cityActions.append(
-      el("span", "player-mode-list-value", number(burg.population * options.map.units.population.scale * options.map.units.population.urbanization.rate) + " hab. · " + (market ? "Marché" : "Sans marché") + (burg.walls ? " · Remparts" : "") + (burg.citadel ? " · Citadelle" : "")),
+      el("span", "player-mode-list-value", number((burg.population ?? 0) * options.map.units.population.scale * options.map.units.population.urbanization.rate) + " hab. · " + (market ? "Marché" : "Sans marché") + (burg.walls ? " · Remparts" : "") + (burg.citadel ? " · Citadelle" : "")),
       makeButton("Développer · " + money(urbanUpgradeCostFor(burg.i, state.i)), () => {
         try {
           const cost = upgradeCity(burg.i, state.i);
