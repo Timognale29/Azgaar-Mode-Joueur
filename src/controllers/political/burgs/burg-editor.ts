@@ -54,6 +54,7 @@ function open(id: number | string): void {
     position: { my: "left top", at: "left+10 top+10", of: "svg" }
   });
   updateBurgValues(); // after opening: moving a loading iframe into the window would restart its navigation
+  window.dispatchEvent(new CustomEvent("azgaar:burg-editor-open", {detail: {burgId: selectedId}}));
 }
 
 function renderDialog(): void {
