@@ -40,6 +40,7 @@ vi.mock("@/model/political/states-generator", () => ({
 import {
   advanceTurn,
   buildMarket,
+  buildRoad,
   exportCampaignData,
   getCampaign,
   getFunds,
