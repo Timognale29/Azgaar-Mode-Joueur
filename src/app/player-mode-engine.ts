@@ -553,7 +553,9 @@ function applyProjectUpkeep(): void {
   for (const project of save.projects) {
     const exists = project.kind === "market"
       ? globalThis.pack.markets.some(market => market.i === project.entityId && globalThis.pack.burgs[market.centerBurgId]?.state === project.stateId)
-      : globalThis.pack.routes.some(route => route.i === project.entityId && route.tags?.includes(`owner:${project.stateId}`));
+      : project.kind === "road"
+        ? globalThis.pack.routes.some(route => route.i === project.entityId && route.tags?.includes(`owner:${project.stateId}`))
+        : Boolean(globalThis.pack.burgs[project.entityId]?.i && !globalThis.pack.burgs[project.entityId]?.removed && globalThis.pack.burgs[project.entityId]?.state === project.stateId);
     if (!exists) {
       addLog(`Un chantier entretenu par ${stateById(project.stateId).name} a disparu de la carte ; son entretien est supprimé.`);
       continue;
@@ -764,11 +766,12 @@ export function advanceTurn(playerId: number): {turn: number; changes: string[]}
   // City populations evolve independently, with a modest prosperity-sensitive rate.
   for (const burg of globalThis.pack.burgs.filter(item => item?.i && !item.removed && item.state)) {
     const state = livingStates().find(item => item.i === burg.state);
-    if (!state || !(burg.population > 0)) continue;
+    const population = burg.population ?? 0;
+    if (!state || population <= 0) continue;
     const prosperity = Accounts.ofState(state.i)?.prosperity ?? 0.5;
     const urbanProjects = save.projects.filter(project => project.kind === "urban_upgrade" && project.entityId === burg.i && project.stateId === state.i).length;
     const growth = clamp(0.001 + (prosperity - 0.5) * 0.012 + urbanProjects * 0.0008, -0.006, 0.012);
-    burg.population = Math.max(1, Math.round(burg.population * (1 + growth)));
+    burg.population = Math.max(1, Math.round(population * (1 + growth)));
   }
   applyProjectUpkeep();
   save.turn++;
