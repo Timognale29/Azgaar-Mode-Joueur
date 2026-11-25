@@ -40,7 +40,6 @@ let playerStateId: number | null = null;
 let campaignActive = false;
 let paused = true;
 let speed = 1;
-let oldViewOnly = false;
 let timer: number | null = null;
 let lastTick = 0;
 let hud: HTMLElement | null = null;
@@ -121,16 +120,13 @@ function updateHud(): void {
 }
 
 function applyCampaignMode(active: boolean): void {
-  if (active && !campaignActive) oldViewOnly = Boolean(options.map.viewOnly);
   if (!active && campaignActive) {
-    options.map.viewOnly = oldViewOnly;
     paused = true;
     pendingMove = null;
   }
-  if (active) {
-    options.map.viewOnly = true; // block free editing; allowed native editors are opened explicitly from map clicks
-    paused = false;
-  }
+  // Sandbox always restores the editable Azgaar map, even if an older campaign saved viewOnly=true.
+  options.map.viewOnly = active;
+  if (active) paused = false;
   campaignActive = active;
   document.body.classList.toggle("player-mode-campaign", active);
   lastTick = Date.now();
