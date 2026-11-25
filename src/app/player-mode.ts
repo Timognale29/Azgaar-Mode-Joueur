@@ -145,10 +145,36 @@ function renderCities(state: State): void {
   setContent(wrapper);
 }
 
+function createTaxControl(
+  label: string,
+  initialValue: number,
+  maxPercent: number,
+  description: string
+): { wrapper: HTMLElement; input: HTMLInputElement; output: HTMLElement } {
+  const wrapper = el("div", "player-mode-tax-control");
+  const heading = el("div", "player-mode-tax-heading");
+  heading.append(el("strong", "", label));
+  const output = el("strong", "player-mode-tax-output", `${number(initialValue * 100)} %`);
+  const slider = el("input");
+  slider.type = "range";
+  slider.min = "0";
+  slider.max = String(maxPercent);
+  slider.step = "0.5";
+  slider.value = String(Math.min(maxPercent, Math.max(0, initialValue * 100)));
+  slider.setAttribute("aria-label", label);
+  slider.addEventListener("input", () => {
+    output.textContent = `${number(Number(slider.value))} %`;
+  });
+  const hint = el("span", "player-mode-muted", description);
+  heading.append(output);
+  wrapper.append(heading, slider, hint);
+  return {wrapper, input: slider, output};
+}
+
 function renderFinance(state: State): void {
   const finance = state.economy;
   const wrapper = el("div", "player-mode-page");
-  wrapper.append(sectionTitle("Finances publiques", "Données du dernier calcul économique d'Azgaar"));
+  wrapper.append(sectionTitle("Finances publiques", "Données économiques et décisions fiscales"));
 
   if (!finance) {
     wrapper.append(el("p", "player-mode-empty", "Aucune donnée financière n'est disponible pour cet État."));
@@ -166,15 +192,45 @@ function renderFinance(state: State): void {
   wrapper.append(cards);
 
   const details = el("div", "player-mode-card");
-  details.append(sectionTitle("Paramètres fiscaux"));
-  details.append(
-    row("Taxe sur les ventes", percent(finance.salesTax)),
-    row("Impôt par habitant", percent(finance.pollTax)),
-    row("Redevance de marché", money(finance.marketFee))
+  details.append(sectionTitle("Fiscalité de l'État", "Modifie les taux appliqués par le moteur économique"));
+  const salesTax = createTaxControl(
+    "Taxe sur les ventes",
+    finance.salesTax,
+    30,
+    "Prélevée sur la valeur des ventes réalisées dans les marchés"
   );
-  wrapper.append(details);
+  const pollTax = createTaxControl(
+    "Impôt par habitant",
+    finance.pollTax,
+    25,
+    "Contribution demandée à la population"
+  );
+  details.append(salesTax.wrapper, pollTax.wrapper);
 
-  const explanation = el("p", "player-mode-note", "Pour l'instant, ces valeurs sont consultées sans être modifiées. La prochaine étape sera d'ajouter des décisions budgétaires avec recalcul contrôlé.");
+  const status = el("p", "player-mode-note", "Les taux affichés sont ceux actuellement enregistrés dans la carte.");
+  const apply = el("button", "player-mode-apply", "Appliquer les taux");
+  apply.type = "button";
+  apply.addEventListener("click", () => {
+    const current = getStates().find(candidate => candidate.i === state.i);
+    if (!current?.economy) return;
+    current.economy.salesTax = Number(salesTax.input.value) / 100;
+    current.economy.pollTax = Number(pollTax.input.value) / 100;
+    status.textContent = "Fiscalité modifiée dans les données de la carte. Pense à utiliser « Save » dans Azgaar pour conserver ces changements dans ton fichier .map.";
+    apply.textContent = "Taux appliqués";
+    apply.disabled = true;
+  });
+  salesTax.input.addEventListener("input", () => {
+    apply.textContent = "Appliquer les taux";
+    apply.disabled = false;
+  });
+  pollTax.input.addEventListener("input", () => {
+    apply.textContent = "Appliquer les taux";
+    apply.disabled = false;
+  });
+  details.append(apply);
+  wrapper.append(details, status);
+
+  const explanation = el("p", "player-mode-note", "Le trésor et les recettes affichés proviennent du dernier calcul économique. Les nouveaux taux seront pris en compte lors du prochain recalcul de l'économie.");
   wrapper.append(explanation);
   setContent(wrapper);
 }
