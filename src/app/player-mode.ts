@@ -280,13 +280,13 @@ function renderOverview(state: State): void {
   const capital = globalThis.pack.burgs[state.capital];
   const population = (state.rural ?? 0) + (state.urban ?? 0);
   const wrapper = el("div", "player-mode-page");
-  wrapper.append(sectionTitle(state.fullName ?? state.name, (state.formName ?? state.form ?? "État") + " · Tour " + campaign.turn));
+  wrapper.append(sectionTitle(state.fullName ?? state.name, (state.formName ?? state.form ?? "État") + " · " + formatGameClock(campaign.elapsedHours ?? 0)));
 
   const grid = el("div", "player-mode-stats-grid");
   grid.append(
     statCard("Trésor de campagne", money(economy.balance), "Fonds disponibles pour les décisions"),
     statCard("Solde économique", money(economy.dailyBalance), "Résultat du dernier cycle journalier"),
-    statCard("Population", number(population), "Évolution à chaque tour"),
+    statCard("Population", number(population), "Évolution quotidienne"),
     statCard("Établissements", number(burgs.length), "Villes et bourgs")
   );
   wrapper.append(grid);
@@ -301,26 +301,28 @@ function renderOverview(state: State): void {
   );
   wrapper.append(publicInfo);
 
-  const controls = el("div", "player-mode-turn-card");
-  controls.append(
-    el("strong", "", "Votre prochain ordre"),
-    el("p", "", "Terminez un tour pour déclencher la production, les ventes, les achats, les impôts, les dépenses publiques et l'évolution des populations.")
+  const identity = getStateIdentity(state.i);
+  const identityCard = el("div", "player-mode-card");
+  identityCard.append(sectionTitle("Identité politique et sociale", "Ces caractéristiques influencent les relations, la croissance et les réactions des autres États."));
+  identityCard.append(
+    row("Gouvernement", identity.government + " · " + identity.governmentFamily),
+    row("Culture dominante", identity.cultureName + " · " + identity.cultureType),
+    row("Religion dominante", identity.religionName + (identity.religionShare ? " · " + number(identity.religionShare * 100) + " %" : ""))
   );
-  controls.append(makeButton("Terminer le tour", () => callAdvanceTurn(state.i), "player-mode-primary"));
-  wrapper.append(controls);
+  wrapper.append(identityCard);
 
   const lastEvents = el("div", "player-mode-card");
   lastEvents.append(sectionTitle("Chronique récente"));
   const entries = campaign.log.slice(0, 4);
-  if (!entries.length) lastEvents.append(el("p", "player-mode-empty", "Aucun événement. Les décisions et les tours apparaîtront ici."));
-  else for (const entry of entries) lastEvents.append(row("Tour " + entry.turn, entry.text));
+  if (!entries.length) lastEvents.append(el("p", "player-mode-empty", "Aucun événement. Les décisions et l’évolution du monde apparaîtront ici."));
+  else for (const entry of entries) lastEvents.append(row("Jour " + entry.turn, entry.text));
   wrapper.append(lastEvents);
 
   const note = el("p", "player-mode-note", "Le trésor de campagne est enregistré dans le navigateur. Les fonds de départ sont une dotation de lancement ; les travaux, marchés, routes, entretiens et missions diplomatiques sont ensuite débités de ce trésor.");
   wrapper.append(note);
 
   const saveCard = el("div", "player-mode-card");
-  saveCard.append(sectionTitle("Sauvegarde de campagne", "Export et import du tour, des trésors, des traités, des guerres et des entretiens."));
+  saveCard.append(sectionTitle("Sauvegarde de campagne", "Export et import de l’horloge, des trésors, des traités, des guerres et des entretiens."));
   const saveActions = el("div", "player-mode-action-grid");
   const download = makeButton("Exporter la campagne", () => {
     const data = exportCampaignData();
@@ -358,7 +360,7 @@ function renderOverview(state: State): void {
 }
 
 function renderCities(state: State): void {
-  const burgs = getStateBurgs(state.i).sort((a, b) => (b.population ?? 0) - (a.population ?? 0));
+  const burgs = getStateBurgs(state.i).sort((a, b) => a.i === selectedBurgId ? -1 : b.i === selectedBurgId ? 1 : (b.population ?? 0) - (a.population ?? 0));
   const wrapper = el("div", "player-mode-page");
   wrapper.append(sectionTitle("Villes et bourgs", burgs.length + " établissement(s) associé(s) à cet État"));
   if (!burgs.length) {
@@ -368,7 +370,7 @@ function renderCities(state: State): void {
   }
   const list = el("div", "player-mode-list");
   for (const burg of burgs.slice(0, 80)) {
-    const item = el("div", "player-mode-list-item");
+    const item = el("div", "player-mode-list-item" + (burg.i === selectedBurgId ? " is-map-selected" : ""));
     const name = el("div", "player-mode-list-main");
     name.append(
       el("strong", "", burg.name ?? ("Établissement " + burg.i)),
@@ -383,7 +385,7 @@ function renderCities(state: State): void {
           const cost = upgradeCity(burg.i, state.i);
           Layers.drawAll();
           render();
-          content?.prepend(el("p", "player-mode-success", "Projet urbain lancé. Coût : " + money(cost) + " ; entretien : 2 par tour."));
+          content?.prepend(el("p", "player-mode-success", "Projet urbain lancé. Coût : " + money(cost) + " ; entretien : 2 par jour."));
         } catch (error) { showActionError(error); }
       }),
       makeButton(burg.walls ? "Remparts construits" : "Construire des remparts · " + money(fortificationCostFor(burg.i, state.i)), () => {
@@ -391,7 +393,7 @@ function renderCities(state: State): void {
           const cost = buildCityFortification(burg.i, state.i);
           Layers.draw("burgIcons", "labels");
           render();
-          content?.prepend(el("p", "player-mode-success", "Fortifications achevées. " + money(cost) + " débités ; entretien : 3 par tour."));
+          content?.prepend(el("p", "player-mode-success", "Fortifications achevées. " + money(cost) + " débités ; entretien : 3 par jour."));
         } catch (error) { showActionError(error); }
       }),
       makeButton(burg.citadel ? "Citadelle construite" : "Construire une citadelle · " + money(citadelCostFor(burg.i, state.i)), () => {
@@ -399,7 +401,7 @@ function renderCities(state: State): void {
           const cost = buildCityCitadel(burg.i, state.i);
           Layers.draw("burgIcons", "labels");
           render();
-          content?.prepend(el("p", "player-mode-success", "Citadelle achevée. " + money(cost) + " débités ; entretien : 5 par tour."));
+          content?.prepend(el("p", "player-mode-success", "Citadelle achevée. " + money(cost) + " débités ; entretien : 5 par jour."));
         } catch (error) { showActionError(error); }
       })
     );
@@ -407,7 +409,7 @@ function renderCities(state: State): void {
     list.append(item);
   }
   wrapper.append(list);
-  wrapper.append(el("p", "player-mode-note", "Les populations sont mises à jour à la fin de chaque tour selon la prospérité calculée par le moteur économique."));
+  wrapper.append(el("p", "player-mode-note", "Les populations évoluent avec le temps, selon la prospérité, le développement culturel et la structure sociale."));
   setContent(wrapper);
 }
 
@@ -415,7 +417,7 @@ function renderFinance(state: State): void {
   const finance = state.economy;
   const economy = getStateEconomy(state.i);
   const wrapper = el("div", "player-mode-page");
-  wrapper.append(sectionTitle("Finances publiques", "Fiscalité et budget exécutés au prochain cycle économique"));
+  wrapper.append(sectionTitle("Finances publiques", "Fiscalité et budget exécutés au prochain cycle quotidien"));
 
   const cards = el("div", "player-mode-stats-grid");
   cards.append(
@@ -435,7 +437,7 @@ function renderFinance(state: State): void {
     try {
       setTaxes(state.i, Number(sales.input.value), Number(poll.input.value));
       render();
-      content?.prepend(el("p", "player-mode-success", "Fiscalité enregistrée. Elle sera prise en compte au prochain tour."));
+      content?.prepend(el("p", "player-mode-success", "Fiscalité enregistrée. Elle sera prise en compte au prochain cycle quotidien."));
     } catch (error) { showActionError(error); }
   }));
   wrapper.append(taxCard);
@@ -459,7 +461,7 @@ function renderFinance(state: State): void {
       for (const item of controls) values[item.key] = Number(item.control.input.value);
       setBudget(state.i, values);
       render();
-      content?.prepend(el("p", "player-mode-success", "Budget enregistré. Les commandes publiques seront passées au prochain tour."));
+      content?.prepend(el("p", "player-mode-success", "Budget enregistré. Les commandes publiques seront passées au prochain cycle quotidien."));
     } catch (error) { showActionError(error); }
   }));
   wrapper.append(budgetCard);
@@ -502,7 +504,7 @@ function renderCommerce(state: State): void {
 
   const partnersCard = el("div", "player-mode-card");
   partnersCard.append(sectionTitle("Partenaires commerciaux"));
-  if (!economy.trade.partners.length) partnersCard.append(el("p", "player-mode-empty", "Aucun échange extérieur recensé. Termine un tour pour recalculer les marchés."));
+  if (!economy.trade.partners.length) partnersCard.append(el("p", "player-mode-empty", "Aucun échange extérieur recensé. Le commerce sera actualisé au prochain cycle quotidien."));
   else {
     const list = el("div", "player-mode-list");
     for (const partner of economy.trade.partners.slice(0, 12)) {
@@ -529,7 +531,7 @@ function renderCommerce(state: State): void {
   if (!stateRoutes.length) routeCard.append(el("p", "player-mode-empty", "Aucune route cartographiée."));
   else for (const route of stateRoutes.slice(0, 20)) routeCard.append(row(route.name ?? ("Route " + route.i), (route.group === "searoutes" ? "Maritime" : route.group === "trails" ? "Sentier" : "Route terrestre") + " · " + number(route.length)));
   wrapper.append(routeCard);
-  wrapper.append(el("p", "player-mode-note", "Les importations, exportations, prix, stocks, tarifs et coûts de transport proviennent du moteur de commerce d'Azgaar, recalculé à chaque tour."));
+  wrapper.append(el("p", "player-mode-note", "Les importations, exportations, prix, stocks, tarifs et coûts de transport proviennent du moteur économique natif d'Azgaar, recalculé chaque jour."));
   setContent(wrapper);
 }
 
@@ -783,13 +785,13 @@ function executePlayerCommand(raw: string, state: State): string {
   if ((match = command.match(/^(?:fixe|regle|modifie|augmente|baisse)\s+(?:la\s+)?taxe\s+(?:sur\s+les\s+ventes|de\s+vente)\s+(?:a|a\s+)?([0-9]+(?:[.,][0-9]+)?)\s*%?$/))) {
     const rate = Number(match[1].replace(",", ".")) / 100;
     setTaxes(state.i, rate, state.economy.pollTax);
-    return "Taxe sur les ventes fixée à " + number(rate * 100) + " %. Le nouveau taux prendra effet au prochain tour.";
+    return "Taxe sur les ventes fixée à " + number(rate * 100) + " %. Le nouveau taux prendra effet au prochain cycle quotidien.";
   }
   if ((match = command.match(/^budget\s+infrastructure\s+(?:a|a\s+)?([0-9]{1,3})\s*%?$/))) {
     const value = Number(match[1]);
     if (value > 100) throw new Error("Le budget doit rester entre 0 et 100 %.");
     setBudget(state.i, {infrastructure: value});
-    return "Part du budget consacrée aux infrastructures fixée à " + value + " %. Les commandes de matériaux seront payées par l'État au prochain tour.";
+    return "Part du budget consacrée aux infrastructures fixée à " + value + " %. Les commandes de matériaux seront payées par l'État au prochain cycle quotidien.";
   }
   if ((match = command.match(/^(?:propose\s+une\s+)?alliance\s+(?:a|avec)\s+(.+)$/))) {
     const target = findNamedState(match[1], state.i);
@@ -804,7 +806,7 @@ function executePlayerCommand(raw: string, state: State): string {
   if ((match = command.match(/^(?:declare|declares)\s+(?:la\s+)?guerre\s+(?:a|contre)\s+(.+)$/))) {
     const target = findNamedState(match[1], state.i);
     const result = negotiate(state.i, target.i, "guerre");
-    return "Conflit engagé contre " + target.name + ". Mobilisation initiale : " + money(result.cost) + ". Les coûts d'entretien et le score stratégique évolueront à chaque tour.";
+    return "Conflit engagé contre " + target.name + ". Mobilisation initiale : " + money(result.cost) + ". Les coûts d'entretien et le score stratégique évolueront chaque jour.";
   }
   if ((match = command.match(/^(?:negocie\s+)?(?:la\s+)?paix\s+(?:avec|a)\s+(.+)$/))) {
     const target = findNamedState(match[1], state.i);
