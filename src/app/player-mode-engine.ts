@@ -396,17 +396,7 @@ export function moveRegiment(stateId: number, regimentId: number, targetCell: nu
   const troopCount = Military.getTroops(regiment.a);
   let defence = 0;
   if (hostile) {
-    const defender = stateById(targetOwner);
-    const burgId = cells.burg[targetCell];
-    const burg = burgId ? globalThis.pack.burgs[burgId] : undefined;
-    defence = Math.ceil(
-      18 +
-      Math.sqrt(Math.max(0, Number(cells.pop?.[targetCell] ?? 0))) * 0.35 +
-      Math.sqrt(Math.max(0, Number(burg?.population ?? 0))) * 0.5 +
-      (burg?.walls ? 55 : 0) +
-      (burg?.citadel ? 100 : 0) +
-      (defender.economy.budget.military ?? 0) * 0.25
-    );
+    defence = estimateCellResistance(targetOwner, targetCell);
     if (troopCount < defence)
       throw new Error("Assaut trop faible : il faut environ " + defence.toLocaleString("fr-FR") + " soldats pour prendre cette case. Renforce le régiment ou vise une autre case.");
   }
@@ -1300,15 +1290,26 @@ function recruitAINation(stateId: number, turn: number): void {
 
 function estimateCellResistance(defenderId: number, cellId: number): number {
   const defender = stateById(defenderId);
-  const burgId = globalThis.pack.cells.burg[cellId];
+  const cells = globalThis.pack.cells;
+  const burgId = cells.burg[cellId];
   const burg = burgId ? globalThis.pack.burgs[burgId] : undefined;
+  const neighbors = new Set(cells.c?.[cellId] ?? []);
+  const garrison = (defender.military ?? []).reduce((total, regiment) => {
+    if (regiment.n) return total;
+    const troops = Military.getTroops(regiment.a);
+    if (regiment.cell === cellId) return total + troops;
+    if (neighbors.has(regiment.cell)) return total + troops * 0.2;
+    return total;
+  }, 0);
+  const fieldDefence = Math.min(1000, garrison * 0.9);
   return Math.ceil(
     18 +
-    Math.sqrt(Math.max(0, Number(globalThis.pack.cells.pop?.[cellId] ?? 0))) * 0.35 +
+    Math.sqrt(Math.max(0, Number(cells.pop?.[cellId] ?? 0))) * 0.35 +
     Math.sqrt(Math.max(0, Number(burg?.population ?? 0))) * 0.5 +
     (burg?.walls ? 55 : 0) +
     (burg?.citadel ? 100 : 0) +
-    (defender.economy.budget.military ?? 0) * 0.25
+    (defender.economy.budget.military ?? 0) * 0.25 +
+    fieldDefence
   );
 }
 
