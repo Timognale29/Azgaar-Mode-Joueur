@@ -221,6 +221,8 @@ function getOrCreateCampaign(): PlayerCampaign {
   campaign.wars ??= [];
   campaign.projects ??= [];
   campaign.log ??= [];
+  // Upgrade saves created before reset snapshots existed: preserve the map as it is now as a reset point.
+  if (campaign.playerStateId && !campaign.initialMap) campaign.initialMap = captureInitialMap();
   if (!Number.isInteger(campaign.turn) || campaign.turn < 1) campaign.turn = 1;
   if (!Number.isFinite(campaign.elapsedHours) || campaign.elapsedHours < 0) campaign.elapsedHours = (campaign.turn - 1) * 24;
 
