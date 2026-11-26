@@ -54,3 +54,15 @@ Chaque camp peut choisir un plan avant ou pendant le combat :
 - **Manœuvre** : +18 % dans les phases de poursuite, surprise et mobilité, +2 % dans les autres phases et -10 % de pertes subies.
 
 Le plan choisi agit sur la puissance calculée et sur les pertes réellement retirées aux régiments. Le rapport du champ de bataille conserve le type de résolution, les plans retenus et les pertes.
+
+## IA des nations et journal du monde
+
+Chaque journée simulée donne maintenant un tour aux États non joués :
+- Les gouvernements ajustent fiscalité et budgets selon leur prospérité et leur régime.
+- Les nations recrutent et entretiennent des régiments en fonction de leur population et de leur trésor.
+- Les voisins peuvent signer des accords commerciaux, former des alliances ou entrer en guerre lorsque les relations se dégradent et que leur armée le permet.
+- Pendant une guerre, les armées IA cherchent un front accessible, avancent sur leur propre territoire puis tentent de prendre des cases ennemies.
+- Les régiments d'un même État et de même type (terrestre ou naval) sont automatiquement rassemblés lorsqu'ils terminent leur déplacement sur la même case.
+- Les garnisons présentes sur une case et les troupes voisines renforcent sa défense contre les invasions.
+
+Le bouton **Journal** du bandeau donne accès aux 40 événements récents (diplomatie, recrutement, déplacements, conquêtes et conflits).
