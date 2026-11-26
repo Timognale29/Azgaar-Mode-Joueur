@@ -38,6 +38,24 @@ export interface PlayerLogEntry {
   turn: number;
   text: string;
 }
+export interface CampaignMapSnapshot {
+  cellStates: number[];
+  cellProvinces: number[];
+  states: Array<{
+    i: number;
+    center: number;
+    capital: number;
+    diplomacy: string[];
+    economy: State["economy"];
+    military: Regiment[];
+    provinces: number[];
+  }>;
+  burgs: Array<{i: number; state: number; population?: number; walls?: number; citadel?: number; capital?: number}>;
+  provinces: unknown[];
+  markets: unknown[];
+  routes: Route[];
+  routeLinks: unknown;
+}
 export interface PlayerCampaign {
   key: string;
   turn: number;
@@ -48,6 +66,7 @@ export interface PlayerCampaign {
   wars: PlayerWar[];
   projects: PlayerProject[];
   log: PlayerLogEntry[];
+  initialMap?: CampaignMapSnapshot;
 }
 export interface TradeSummary {
   exports: number;
@@ -72,6 +91,74 @@ const DIPLOMACY_COST = 65;
 const WAR_MOBILIZATION_COST = 240;
 
 let campaign: PlayerCampaign | null = null;
+
+function cloneData<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function captureInitialMap(): CampaignMapSnapshot {
+  const cells = globalThis.pack.cells;
+  return {
+    cellStates: Array.from(cells.state),
+    cellProvinces: Array.from(cells.province ?? []),
+    states: livingStates().map(state => ({
+      i: state.i,
+      center: state.center,
+      capital: state.capital,
+      diplomacy: cloneData(state.diplomacy ?? []),
+      economy: cloneData(state.economy),
+      military: cloneData(state.military ?? []),
+      provinces: cloneData(state.provinces ?? [])
+    })),
+    burgs: globalThis.pack.burgs.filter(burg => burg?.i && !burg.removed).map(burg => ({
+      i: burg.i,
+      state: burg.state ?? 0,
+      population: burg.population,
+      walls: burg.walls,
+      citadel: burg.citadel,
+      capital: burg.capital
+    })),
+    provinces: cloneData(globalThis.pack.provinces ?? []),
+    markets: cloneData(globalThis.pack.markets ?? []),
+    routes: cloneData(globalThis.pack.routes ?? []),
+    routeLinks: cloneData(cells.routes ?? {})
+  };
+}
+
+function restoreInitialMap(snapshot: CampaignMapSnapshot): void {
+  const {cells, states, burgs} = globalThis.pack;
+  if (snapshot.cellStates.length !== cells.state.length || snapshot.states.length !== livingStates().length)
+    throw new Error("La sauvegarde initiale ne correspond plus à cette carte.");
+
+  snapshot.cellStates.forEach((stateId, cellId) => { cells.state[cellId] = stateId; });
+  snapshot.cellProvinces.forEach((provinceId, cellId) => { if (cells.province) cells.province[cellId] = provinceId; });
+  globalThis.pack.provinces = cloneData(snapshot.provinces) as typeof globalThis.pack.provinces;
+  for (const saved of snapshot.states) {
+    const state = states[saved.i];
+    if (!state || state.removed) continue;
+    state.center = saved.center;
+    state.capital = saved.capital;
+    state.diplomacy = cloneData(saved.diplomacy);
+    state.economy = cloneData(saved.economy);
+    state.military = cloneData(saved.military);
+    state.provinces = cloneData(saved.provinces);
+  }
+  for (const saved of snapshot.burgs) {
+    const burg = burgs[saved.i];
+    if (!burg || burg.removed) continue;
+    burg.state = saved.state;
+    burg.population = saved.population;
+    burg.walls = saved.walls;
+    burg.citadel = saved.citadel;
+    burg.capital = saved.capital;
+  }
+  globalThis.pack.markets = cloneData(snapshot.markets) as typeof globalThis.pack.markets;
+  globalThis.pack.routes = cloneData(snapshot.routes);
+  cells.routes = cloneData(snapshot.routeLinks) as typeof cells.routes;
+  States.getPoles();
+  States.findNeighbors();
+  States.collectStatistics();
+}
 
 function livingStates(): State[] {
   return (globalThis.pack?.states ?? []).filter(state => state && state.i > 0 && !state.removed);
@@ -158,7 +245,26 @@ export function setPlayerState(stateId: number): void {
   stateById(stateId);
   clearStateIdentityCache();
   const save = getOrCreateCampaign();
+  if (!save.playerStateId && !save.initialMap) save.initialMap = captureInitialMap();
   save.playerStateId = stateId;
+  persist();
+}
+
+export function resetCampaign(): boolean {
+  const save = getOrCreateCampaign();
+  const restoredMap = Boolean(save.initialMap);
+  if (save.initialMap) restoreInitialMap(save.initialMap);
+  try {
+    localStorage.removeItem(save.key);
+  } catch (error) {
+    console.warn("La sauvegarde de campagne n'a pas pu être effacée.", error);
+  }
+  campaign = null;
+  clearStateIdentityCache();
+  return restoredMap;
+}
+
+export function saveCampaign(): void {
   persist();
 }
 export function getPlayerStateId(): number | null {
@@ -223,7 +329,26 @@ export function recruitRegiment(stateId: number, regimentId: number, unitName: s
   }
 }
 
-/** Move a regiment within friendly territory with a distance-based, paid movement order. */
+function prepareStateCenterForCapture(ownerId: number, targetCell: number): void {
+  const owner = stateById(ownerId);
+  const burgId = globalThis.pack.cells.burg[targetCell];
+  const burg = burgId ? globalThis.pack.burgs[burgId] : undefined;
+  if (burg?.capital) {
+    const replacement = globalThis.pack.burgs.find(candidate =>
+      candidate?.i && !candidate.removed && candidate.state === ownerId && candidate.i !== burgId
+    );
+    if (!replacement) throw new Error("Cette capitale est le dernier centre urbain de l'État. Il faut d'abord prendre une autre ville.");
+    Burgs.setCapital(replacement.i);
+  } else if (owner.center === targetCell) {
+    const replacementCell = globalThis.pack.cells.i.find(cell =>
+      cell !== targetCell && globalThis.pack.cells.h[cell] >= 20 && globalThis.pack.cells.state[cell] === ownerId
+    );
+    if (replacementCell === undefined) throw new Error("Cette cellule est le dernier centre territorial de l'État.");
+    owner.center = replacementCell;
+  }
+}
+
+/** Move a regiment. Neutral cells can be occupied; enemy cells can only be taken during a declared war. */
 export function moveRegiment(stateId: number, regimentId: number, targetCell: number): number {
   const state = stateById(stateId);
   const regiment = state.military?.find(candidate => candidate.i === regimentId);
@@ -231,26 +356,76 @@ export function moveRegiment(stateId: number, regimentId: number, targetCell: nu
   const cells = globalThis.pack.cells;
   if (!Number.isInteger(targetCell) || targetCell < 0 || targetCell >= cells.i.length)
     throw new Error("Cellule de destination invalide.");
+
   const targetOwner = Number(cells.state[targetCell] ?? 0);
-  if (targetOwner !== 0 && targetOwner !== stateId && getAttitude(stateId, targetOwner) !== "Ally")
-    throw new Error("Les régiments ne peuvent se déplacer que sur votre territoire, les terres neutres ou celles d'un allié.");
+  const hostile = targetOwner > 0 && targetOwner !== stateId && getAttitude(stateId, targetOwner) !== "Ally";
+  const neutralLand = targetOwner === 0 && cells.h[targetCell] >= 20;
+  if (hostile && !getActiveWar(stateId, targetOwner))
+    throw new Error("Il faut d'abord déclarer la guerre à cet État depuis son panneau diplomatique.");
+  if (hostile || neutralLand) {
+    const neighbors = cells.c?.[regiment.cell] ?? [];
+    if (!neighbors.includes(targetCell))
+      throw new Error("Pour conquérir, avance de cellule en cellule : choisis une case qui touche la position actuelle du régiment.");
+  }
+  if (targetOwner !== 0 && targetOwner !== stateId && !hostile && getAttitude(stateId, targetOwner) !== "Ally")
+    throw new Error("Le passage sur ce territoire n'est pas autorisé.");
   const isWater = cells.h[targetCell] < 20;
   if (Boolean(regiment.n) !== isWater)
     throw new Error(regiment.n ? "Une flotte doit rester en mer ou sur un lac navigable." : "Un régiment terrestre ne peut pas être envoyé sur l'eau.");
+
   const [x, y] = cells.p[targetCell];
   const distance = Math.hypot(x - regiment.x, y - regiment.y);
   const range = Math.max(20, Math.min(options.map.graph.width, options.map.graph.height) * 0.22);
   if (distance > range)
     throw new Error("Destination trop éloignée pour un seul ordre. Choisis une étape plus proche.");
-  const cost = Math.max(8, Math.ceil(distance * 0.28));
-  charge(stateId, cost, "Ordre de déplacement de " + regiment.name);
+
+  const troopCount = Military.getTroops(regiment.a);
+  let defence = 0;
+  if (hostile) {
+    const defender = stateById(targetOwner);
+    const burgId = cells.burg[targetCell];
+    const burg = burgId ? globalThis.pack.burgs[burgId] : undefined;
+    defence = Math.ceil(
+      18 +
+      Math.sqrt(Math.max(0, Number(cells.pop?.[targetCell] ?? 0))) * 0.35 +
+      Math.sqrt(Math.max(0, Number(burg?.population ?? 0))) * 0.5 +
+      (burg?.walls ? 55 : 0) +
+      (burg?.citadel ? 100 : 0) +
+      (defender.economy.budget.military ?? 0) * 0.25
+    );
+    if (troopCount < defence)
+      throw new Error("Assaut trop faible : il faut environ " + defence.toLocaleString("fr-FR") + " soldats pour prendre cette case. Renforce le régiment ou vise une autre case.");
+  }
+
+  const cost = Math.max(8, Math.ceil(distance * 0.28)) + (hostile ? 30 + Math.ceil(defence * 0.12) : 0);
+  const previous = {x: regiment.x, y: regiment.y, bx: regiment.bx, by: regiment.by, cell: regiment.cell};
+  charge(stateId, cost, hostile ? "Assaut territorial de " + regiment.name : "Ordre de déplacement de " + regiment.name);
   try {
+    if (hostile || neutralLand) {
+      if (hostile) prepareStateCenterForCapture(targetOwner, targetCell);
+    }
     Military.move(stateId, regimentId, x, y);
     Military.setBase(stateId, regimentId, x, y);
     regiment.cell = targetCell;
-    addLog(regiment.name + " se déplace vers la cellule " + targetCell + " (" + formatMoney(cost) + ").");
+    if (hostile || neutralLand) {
+      States.setCells(stateId, [targetCell]);
+      if (hostile) {
+        const war = getActiveWar(stateId, targetOwner);
+        if (war) war.score = clamp(war.score + (war.attacker === stateId ? 5 : -5), -100, 100);
+        addLog(regiment.name + " prend une case à " + stateById(stateId).name + " sur " + stateById(targetOwner).name + ". Résistance estimée : " + defence + " ; effectif engagé : " + troopCount + ".");
+      } else {
+        addLog(regiment.name + " occupe une case neutre.");
+      }
+    } else {
+      addLog(regiment.name + " se déplace vers la cellule " + targetCell + ".");
+    }
     return cost;
   } catch (error) {
+    regiment.x = previous.x;
+    regiment.y = previous.y;
+    regiment.bx = previous.bx;
+    regiment.by = previous.by;
+    regiment.cell = previous.cell;
     const save = getOrCreateCampaign();
     save.funds[String(stateId)] = (save.funds[String(stateId)] ?? 0) + cost;
     persist();
@@ -901,6 +1076,9 @@ export function setEmbargo(playerId: number, targetId: number): void {
 
 function updateAIDiplomacy(playerId: number): void {
   const states = livingStates();
+  // Cache identity and trade data once per state instead of recomputing it for every possible pair.
+  const identities = new Map(states.map(state => [state.i, getStateIdentity(state.i)]));
+  const trades = new Map(states.map(state => [state.i, Accounts.getTrade(state.i).partners]));
   for (let i = 0; i < states.length; i++) {
     for (let j = i + 1; j < states.length; j++) {
       let subject = states[i];
@@ -908,7 +1086,26 @@ function updateAIDiplomacy(playerId: number): void {
       if (subject.i === playerId) [subject, object] = [object, subject];
       const current = subject.diplomacy?.[object.i] ?? "Neutral";
       if (current === "Enemy" || current === "Vassal" || current === "Suzerain") continue;
-      const score = relationScore(subject.i, object.i);
+      const a = identities.get(subject.i)!;
+      const b = identities.get(object.i)!;
+      let score = 0;
+      if (subject.culture === object.culture) score += 22;
+      else if (a.cultureAncestry && a.cultureAncestry === b.cultureAncestry) score += 10;
+      if (a.cultureType && a.cultureType === b.cultureType) score += 5;
+      if (a.religionName === b.religionName && a.religionShare > 0.25 && b.religionShare > 0.25) score += 22;
+      else if (a.religionShare > 0.65 && b.religionShare > 0.65) score -= 8;
+      if (a.governmentFamily === b.governmentFamily && a.governmentFamily !== "other") score += 8;
+      if ((a.governmentFamily === "theocracy" && b.governmentFamily === "clan") ||
+          (a.governmentFamily === "clan" && b.governmentFamily === "theocracy")) score -= 14;
+      if (subject.neighbors?.includes(object.i)) score += 18;
+      const trade = trades.get(subject.i)?.get(object.i);
+      score += Math.min(20, Math.log1p(Math.max(0, (trade?.exports ?? 0) + (trade?.imports ?? 0))) * 3);
+      if (current === "Friendly") score += 10;
+      if (current === "Ally") score += 20;
+      if (current === "Suspicion") score -= 12;
+      if (current === "Rival") score -= 28;
+      if (current === "Enemy") score -= 60;
+      if (!object.neighbors?.includes(subject.i) && !subject.neighbors?.includes(object.i)) score -= 5;
       if (current === "Ally" && score >= 8) continue;
       if (current === "Friendly" && score >= 8) continue;
       if (current === "Rival" && score <= -8) continue;
@@ -991,7 +1188,14 @@ function simulateDay(playerId: number): {turn: number; changes: string[]} {
   Production.regenerate();
 
   const changes: string[] = [];
-  for (const state of livingStates()) {
+  const states = livingStates();
+  const statesById = new Map(states.map(state => [state.i, state]));
+  const urbanProjectCounts = new Map<number, number>();
+  for (const project of save.projects) {
+    if (project.kind !== "urban_upgrade") continue;
+    urbanProjectCounts.set(project.entityId, (urbanProjectCounts.get(project.entityId) ?? 0) + 1);
+  }
+  for (const state of states) {
     const id = String(state.i);
     const net = Number(state.economy?.treasury ?? 0);
     save.funds[id] = Math.round(((save.funds[id] ?? STARTING_GRANT) + net) * 100) / 100;
@@ -1017,12 +1221,12 @@ function simulateDay(playerId: number): {turn: number; changes: string[]} {
 
   // City growth is affected by local prosperity and the state's cultural development.
   for (const burg of globalThis.pack.burgs.filter(item => item?.i && !item.removed && item.state)) {
-    const state = livingStates().find(item => item.i === burg.state);
+    const state = statesById.get(burg.state);
     const population = burg.population ?? 0;
     if (!state || population <= 0) continue;
     const prosperity = Accounts.ofState(state.i)?.prosperity ?? 0.5;
     const identity = getStateIdentity(state.i);
-    const urbanProjects = save.projects.filter(project => project.kind === "urban_upgrade" && project.entityId === burg.i && project.stateId === state.i).length;
+    const urbanProjects = urbanProjectCounts.get(burg.i) ?? 0;
     const cultureDevelopment = globalThis.pack.cultures?.[state.culture]?.development ?? 30;
     const identityEffect = (cultureDevelopment - 30) * 0.00001 + (identity.governmentFamily === "clan" ? -0.00005 : 0);
     const growth = clamp(0.001 + (prosperity - 0.5) * 0.012 + urbanProjects * 0.0008 + identityEffect, -0.006, 0.012);
@@ -1055,7 +1259,7 @@ export function advanceClock(playerId: number, elapsedHours: number): {elapsedHo
   const days = newDay - previousDay;
   const changes: string[] = [];
   for (let day = 0; day < days; day++) changes.push(...simulateDay(playerId).changes);
-  persist();
+  if (days > 0) persist(); // avoid synchronous localStorage serialization on every 1-second clock tick
   return {elapsedHours: save.elapsedHours, days, changes};
 }
 
