@@ -1405,7 +1405,7 @@ function estimateCellResistance(defenderId: number, cellId: number): number {
     if (neighbors.has(stationedCell)) return total + troops * 0.3;
     return total;
   }, 0);
-  const fieldDefence = Math.min(1600, garrison * 1.15);
+  const fieldDefence = Math.min(4000, garrison * 1.15);
   return Math.ceil(
     18 +
     Math.sqrt(Math.max(0, Number(cells.pop?.[cellId] ?? 0))) * 0.35 +
@@ -1532,12 +1532,16 @@ function considerAINationDiplomacy(stateId: number, turn: number): void {
   }
 
   const rivals = targets
-    .filter(item => item.score <= -22)
+    .filter(item => {
+      const attitude = getAttitude(stateId, item.targetId);
+      return item.score <= -14 || ((attitude === "Rival" || attitude === "Suspicion") && item.score <= 0);
+    })
     .sort((a, b) => a.score - b.score);
-  if (!rivals.length || (turn + stateId * 7) % 6 !== 0) return;
+  if (!rivals.length || (turn + stateId * 7) % 5 !== 0) return;
   const troops = countStateTroops(stateId);
-  if (troops < 160) return;
-  const target = rivals.find(item => warPower(stateId) >= warPower(item.targetId) * 0.82);
+  const population = Math.max(0, (stateById(stateId).rural ?? 0) + (stateById(stateId).urban ?? 0));
+  if (troops < Math.max(180, population * 0.003)) return;
+  const target = rivals.find(item => warPower(stateId) >= warPower(item.targetId) * 0.9);
   if (!target) return;
   try {
     negotiate(stateId, target.targetId, "guerre");
