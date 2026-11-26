@@ -23,9 +23,11 @@ import { P, Pint, rand } from "@/utils/probability-utils";
 import { capitalize, escapeHtml } from "@/utils/string-utils";
 
 type Side = "attackers" | "defenders";
+type BattleTactic = "balanced" | "aggressive" | "defensive" | "mobile";
 
 interface BattleSide {
   regiments: Regiment[];
+  tactic: BattleTactic;
   distances: number[];
   morale: number;
   casualties: number;
@@ -45,6 +47,7 @@ interface BattleState {
   place: string | null;
   type: string;
   name: string;
+  automatic?: boolean;
 }
 
 let battle: BattleState | null = null;
@@ -65,8 +68,8 @@ function open(attacker: Regiment, defender: Regiment): void {
     x,
     y,
     cell,
-    attackers: { regiments: [], distances: [], morale: 100, casualties: 0, power: 0 },
-    defenders: { regiments: [], distances: [], morale: 100, casualties: 0, power: 0 },
+    attackers: { regiments: [], distances: [], morale: 100, casualties: 0, power: 0, tactic: "balanced" },
+    defenders: { regiments: [], distances: [], morale: 100, casualties: 0, power: 0, tactic: "balanced" },
     phasesRecord: [],
     place: null,
     type: "field",
@@ -298,6 +301,15 @@ function renderDialog(): void {
         </template>
         <div style="font-size: 1.2em; font-weight: bold; width: unset">
           <span>${t("Attackers")}</span>
+          <div class="battle-tactic-control" data-tip="${t("Choose a plan: each plan changes combat strength and losses")}">
+            <label for="battleTactic_attackers">${t("Plan")}</label>
+            <select id="battleTactic_attackers" class="battle-tactic-select">
+              <option value="balanced">${t("Balanced")}</option>
+              <option value="aggressive">${t("Aggressive")}</option>
+              <option value="defensive">${t("Defensive")}</option>
+              <option value="mobile">${t("Mobile")}</option>
+            </select>
+          </div>
           <div style="float: right; font-size: 0.7em">
             <meter
               id="battleMorale_attackers"
@@ -329,6 +341,15 @@ function renderDialog(): void {
         <table id="battleAttackers"></table>
         <div style="font-size: 1.2em; font-weight: bold; width: unset">
           <span>${t("Defenders")}</span>
+          <div class="battle-tactic-control" data-tip="${t("Choose a plan: each plan changes combat strength and losses")}">
+            <label for="battleTactic_defenders">${t("Plan")}</label>
+            <select id="battleTactic_defenders" class="battle-tactic-select">
+              <option value="balanced">${t("Balanced")}</option>
+              <option value="aggressive">${t("Aggressive")}</option>
+              <option value="defensive">${t("Defensive")}</option>
+              <option value="mobile">${t("Mobile")}</option>
+            </select>
+          </div>
           <div style="float: right; font-size: 0.7em">
             <meter
               id="battleMorale_defenders"
@@ -395,7 +416,8 @@ function renderDialog(): void {
         </div>
         <button id="battleAddRegiment" data-tip="${t("Add regiment to the battle")}" class="icon-user-plus"></button>
         <button id="battleRoll" data-tip="${t("Roll dice to update random factor")}" class="icon-die"></button>
-        <button id="battleRun" data-tip="${t("Iterate battle")}" class="icon-play"></button>
+        <button id="battleRun" data-tip="${t("Resolve one combat round")}" class="icon-play"></button>
+        <button id="battleAuto" data-tip="${t("Resolve the battle automatically using the chosen plans")}" class="battle-auto-button">${t("Auto-resolve")}</button>
         <button
           id="battleApply"
           data-tip="${t("End battle: apply current results and close the screen")}"
@@ -444,6 +466,9 @@ function renderDialog(): void {
   ensureEl("battleAddRegiment").addEventListener("click", () => addSide());
   ensureEl("battleRoll").addEventListener("click", () => randomizeBattle());
   ensureEl("battleRun").addEventListener("click", () => runBattle());
+  ensureEl("battleAuto").addEventListener("click", () => runAutoBattle());
+  ensureEl<HTMLSelectElement>("battleTactic_attackers").addEventListener("change", event => changeTactic(event, "attackers"));
+  ensureEl<HTMLSelectElement>("battleTactic_defenders").addEventListener("change", event => changeTactic(event, "defenders"));
   ensureEl("battleApply").addEventListener("click", () => applyResults());
   ensureEl("battleCancel").addEventListener("click", () => cancelResults());
   ensureEl("battleWiki").addEventListener("click", () => wiki("Battle-Simulator"));
@@ -458,6 +483,40 @@ function renderDialog(): void {
   );
   ensureEl("battleDie_attackers").addEventListener("click", () => rollDie("attackers"));
   ensureEl("battleDie_defenders").addEventListener("click", () => rollDie("defenders"));
+}
+
+function changeTactic(event: Event, side: Side): void {
+  if (!battle) return;
+  const value = (event.target as HTMLSelectElement).value as BattleTactic;
+  if (!["balanced", "aggressive", "defensive", "mobile"].includes(value)) return;
+  battle[side].tactic = value;
+  calculateStrength(side);
+  const names: Record<BattleTactic, string> = {
+    balanced: t("Balanced"),
+    aggressive: t("Aggressive"),
+    defensive: t("Defensive"),
+    mobile: t("Mobile")
+  };
+  tip(`${side === "attackers" ? t("Attackers") : t("Defenders")}: ${names[value]}`, true, "success", 1800);
+}
+
+function getTacticPowerFactor(side: BattleSide): number {
+  const phase = side.phase ?? "";
+  if (side.tactic === "aggressive") return ["retreat", "withdrawal", "flee", "sheltering"].includes(phase) ? 0.9 : 1.14;
+  if (side.tactic === "defensive") return ["defense", "sheltering", "blockade", "withdrawal", "retreat", "waiting"].includes(phase)
+    ? 1.16
+    : 0.94;
+  if (side.tactic === "mobile") return ["pursue", "chase", "surprise", "shock", "maneuvering", "dogfight"].includes(phase)
+    ? 1.18
+    : 1.02;
+  return 1;
+}
+
+function getTacticCasualtyFactor(side: BattleSide): number {
+  if (side.tactic === "aggressive") return 1.18; // more damage, but exposes troops
+  if (side.tactic === "defensive") return 0.78; // protects troops at the cost of initiative
+  if (side.tactic === "mobile") return 0.9; // flexible withdrawals and fewer losses
+  return 1;
 }
 
 function defineType(): void {
@@ -904,7 +963,7 @@ function calculateStrength(side: Side): void {
       options.map.military.units.map(
         u => (forces[u.name] || 0) * u.power * (scheme[phase][u.type] ?? scheme[phase].melee) // levies fight as melee
       )
-    ) / adjuster;
+    ) / adjuster * getTacticPowerFactor(b[side]);
   const uiValue = b[side].power ? Math.max(b[side].power | 0, 1) : 0;
   ensureEl(`battlePower_${side}`).innerHTML = String(uiValue);
 }
@@ -1166,8 +1225,8 @@ function runBattle(): void {
 
   const casualties =
     Math.random() * Math.max(phaseCasualtyRate[b.attackers.phase!], phaseCasualtyRate[b.defenders.phase!]); // total casualties, ~10% per iteration
-  const casualtiesA = (casualties * defense) / (attack + defense); // attackers casualties, ~5% per iteration
-  const casualtiesD = (casualties * attack) / (attack + defense); // defenders casualties, ~5% per iteration
+  const casualtiesA = (casualties * defense) / (attack + defense) * getTacticCasualtyFactor(b.attackers); // casualties depend on the attackers' exposure
+  const casualtiesD = (casualties * attack) / (attack + defense) * getTacticCasualtyFactor(b.defenders); // casualties depend on the defenders' exposure
 
   calculateCasualties("attackers", casualtiesA);
   calculateCasualties("defenders", casualtiesD);
@@ -1187,6 +1246,41 @@ function runBattle(): void {
   selectPhase();
   calculateStrength("attackers");
   calculateStrength("defenders");
+}
+
+function runAutoBattle(): void {
+  const b = battle;
+  if (!b) return;
+  if (!b.attackers.power || !b.defenders.power) {
+    tip(t("Both sides need at least one effective unit"), false, "warn");
+    return;
+  }
+
+  const maxRounds = 32;
+  const withdrawalPhases = ["retreat", "withdrawal", "flee", "surrendering", "looting"];
+  let rounds = 0;
+  let withdrawalWasResolved = false;
+
+  while (rounds < maxRounds && b.attackers.power > 0 && b.defenders.power > 0) {
+    rollDie("attackers");
+    rollDie("defenders");
+    runBattle();
+    rounds++;
+
+    if (!b.attackers.power || !b.defenders.power || b.attackers.morale <= 5 || b.defenders.morale <= 5) break;
+    const withdrawal = withdrawalPhases.includes(b.attackers.phase ?? "") || withdrawalPhases.includes(b.defenders.phase ?? "");
+    if (withdrawal) {
+      // Resolve one final retreat / surrender round, then end the engagement.
+      if (withdrawalWasResolved) break;
+      withdrawalWasResolved = true;
+    } else {
+      withdrawalWasResolved = false;
+    }
+  }
+
+  b.automatic = true;
+  tip(t("Battle automatically resolved in {{rounds}} rounds", {rounds}), true, "success", 3500);
+  applyResults();
 }
 
 function calculateCasualties(side: Side, casualties: number): void {
@@ -1402,6 +1496,7 @@ function applyResults(): void {
     legend += `<br><br>${t("Engagement progression")}:<br>${phasesText}`;
   }
 
+  if (b.automatic) legend += `<br><br>Combat resolution: automatic (${b.iteration} rounds), using the selected tactical plans.`;
   marker.note = legend;
 
   tip(t("{{battle}} is over. {{result}}", { battle: b.name, result }), true, "success", 4000);
