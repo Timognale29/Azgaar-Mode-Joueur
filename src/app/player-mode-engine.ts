@@ -8,6 +8,7 @@ import type { Route } from "@/model/economy/routes-generator";
 import { States } from "@/model/political/states-generator";
 import type { State } from "@/model/political/states-generator";
 import { FlatQueue } from "@/utils/flat-queue";
+import { Pack } from "@/model/graph/pack-generator";
 
 export type TreatyKind = "alliance" | "commerce" | "paix";
 export interface PlayerTreaty {
@@ -362,26 +363,12 @@ function prepareStateCenterForCapture(ownerId: number, targetCell: number): void
   }
 }
 
-/** Resolve the regiment's actual map cell from its position; cell can become stale after native editor moves. */
+/** Resolve the regiment's actual map cell from the same spatial index used by map clicks. */
 function getRegimentCell(regiment: Regiment): number {
-  const cells = globalThis.pack.cells;
   const x = Number(regiment.x);
   const y = Number(regiment.y);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return Number(regiment.cell);
-  let nearest = Number(regiment.cell);
-  let nearestDistance = Number.POSITIVE_INFINITY;
-  for (const cell of cells.i) {
-    const point = cells.p[cell];
-    if (!point) continue;
-    const dx = point[0] - x;
-    const dy = point[1] - y;
-    const distance = dx * dx + dy * dy;
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearest = cell;
-    }
-  }
-  return nearest;
+  return Pack.findCell(x, y) ?? Number(regiment.cell);
 }
 
 function applyRegimentLosses(stateId: number, regiment: Regiment, losses: number): number {
