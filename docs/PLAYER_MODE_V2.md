@@ -38,3 +38,19 @@ Le mode joueur conserve la carte et les fenêtres natives d'Azgaar. Le tutoriel 
 - La campagne est sauvegardée lors des journées simulées, à la pause, à la sortie du mode et lorsque la page est quittée.
 
 Les cartes particulièrement grandes peuvent encore ralentir lors d'un recalcul économique quotidien ; les optimisations réduisent les à-coups, sans garantir l'absence totale de ralentissements.
+
+
+## Batailles
+
+L'écran de bataille natif propose maintenant deux façons de jouer :
+
+- **Résolution auto** : enchaîne les phases en relançant les dés, puis applique les pertes et clôt le combat. La simulation s'arrête sur une retraite, une déroute, un épuisement ou après 32 phases au maximum.
+- **Résolution manuelle** : le bouton de phase continue à résoudre une seule phase à la fois, pour garder le contrôle du simulateur historique.
+
+Chaque camp peut choisir un plan avant ou pendant le combat :
+- **Équilibré** : aucun modificateur.
+- **Offensive** : +14 % de puissance hors phases de retraite, mais +18 % de pertes subies.
+- **Défensive** : +16 % de puissance dans les phases défensives, -6 % dans les autres phases et -22 % de pertes subies.
+- **Manœuvre** : +18 % dans les phases de poursuite, surprise et mobilité, +2 % dans les autres phases et -10 % de pertes subies.
+
+Le plan choisi agit sur la puissance calculée et sur les pertes réellement retirées aux régiments. Le rapport du champ de bataille conserve le type de résolution, les plans retenus et les pertes.
