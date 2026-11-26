@@ -92,6 +92,31 @@
   font: 12px/1.4 system-ui, sans-serif;
 }
 .player-campaign-dialog-body > p { margin: 0; }
+
+.player-campaign-journal {
+  gap: 7px;
+}
+.player-campaign-journal-entry {
+  display: grid;
+  gap: 3px;
+  padding: 7px 8px;
+  border-left: 3px solid #9a8b68;
+  border-bottom: 1px solid var(--separator-color, #d4cbb9);
+  background: color-mix(in srgb, var(--bg-main, #fff) 94%, #d8d0bd);
+}
+.player-campaign-journal-turn {
+  color: var(--dark-solid, #34483e);
+  font-size: 10px;
+}
+.player-campaign-journal-text {
+  margin: 0;
+  line-height: 1.45;
+}
+.player-campaign-journal-empty {
+  padding: 12px;
+  color: var(--text-muted, #73766f);
+  text-align: center;
+}
 .player-campaign-section {
   display: grid;
   gap: 6px;
