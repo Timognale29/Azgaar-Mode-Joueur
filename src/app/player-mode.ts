@@ -481,7 +481,7 @@ function lockNativeRegimentEditor(stateId: number): void {
   }
   const attack = document.getElementById("regimentAttack") as HTMLButtonElement | null;
   if (attack) {
-    attack.disabled = false;
+    attack.disabled = stateId !== playerStateId;
     attack.title = "Choisir un régiment ennemi à attaquer";
   }
 }
