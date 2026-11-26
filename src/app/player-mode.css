@@ -45,6 +45,44 @@
 }
 .player-campaign-hud-button:hover { filter: brightness(1.12); }
 
+.player-campaign-reset-button {
+  border-color: #9b4e43;
+  color: #fff3ef;
+  background: #754139;
+}
+.player-campaign-reset-button:disabled {
+  opacity: .45;
+  cursor: default;
+}
+.player-tutorial-body {
+  gap: 12px;
+}
+.player-tutorial-progress {
+  color: var(--text-muted, #73766f);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.player-tutorial-title {
+  margin: 0;
+  color: var(--dark-solid, #263b36);
+  font-size: 17px;
+}
+.player-tutorial-paragraph {
+  margin: 0;
+  padding: 8px 9px;
+  border-left: 3px solid #9a8b68;
+  background: color-mix(in srgb, var(--bg-main, #fff) 90%, #d8d0bd);
+  line-height: 1.5;
+}
+.player-tutorial-navigation {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 5px;
+}
+
 .player-campaign-dialog-body {
   display: grid;
   gap: 9px;
