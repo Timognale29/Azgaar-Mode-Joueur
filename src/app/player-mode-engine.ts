@@ -1361,8 +1361,7 @@ function recruitAINation(stateId: number, turn: number): void {
     try {
       const capital = globalThis.pack.burgs[state.capital];
       if (!capital || capital.removed) return;
-      const regimentId = Military.add(stateId, ...globalThis.pack.cells.p[capital.cell]);
-      regiment = state.military?.find(candidate => candidate.i === regimentId);
+      regiment = raiseRegiment(stateId);
     } catch {
       return;
     }
@@ -1393,8 +1392,9 @@ function estimateCellResistance(defenderId: number, cellId: number): number {
   const garrison = (defender.military ?? []).reduce((total, regiment) => {
     if (regiment.n) return total;
     const troops = Military.getTroops(regiment.a);
-    if (regiment.cell === cellId) return total + troops;
-    if (neighbors.has(regiment.cell)) return total + troops * 0.2;
+    const stationedCell = getRegimentCell(regiment);
+    if (stationedCell === cellId) return total + troops;
+    if (neighbors.has(stationedCell)) return total + troops * 0.2;
     return total;
   }, 0);
   const fieldDefence = Math.min(1000, garrison * 0.9);
@@ -1411,7 +1411,7 @@ function estimateCellResistance(defenderId: number, cellId: number): number {
 
 function findAIFrontlineStep(stateId: number, enemyId: number, regiment: Regiment): number | null {
   const cells = globalThis.pack.cells;
-  const start = Number(regiment.cell);
+  const start = getRegimentCell(regiment);
   if (!Number.isInteger(start) || start < 0 || start >= cells.i.length) return null;
   const visited = new Uint8Array(cells.i.length);
   const firstStep = new Int32Array(cells.i.length);
@@ -1462,10 +1462,13 @@ function advanceAINationArmy(stateId: number, turn: number): void {
   if (!available.length) return;
 
   // Preserve a capital garrison when the nation has multiple formed regiments.
-  const movable = available.length > 1
-    ? available.filter(regiment => getRegimentCell(regiment) !== capitalCell)
-    : available;
-  const forces = (movable.length ? movable : available).slice(0, 2);
+  const nonCapital = available.filter(regiment => getRegimentCell(regiment) !== capitalCell);
+  const movable = nonCapital.length
+    ? nonCapital
+    : available.length > 1
+      ? available.slice(0, -1) // retain one regiment as the capital reserve
+      : available;
+  const forces = movable.slice(0, 2);
   const usedSteps = new Set<number>();
   let moved = 0;
 
