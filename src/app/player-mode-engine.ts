@@ -535,7 +535,9 @@ export function moveRegiment(stateId: number, regimentId: number, targetCell: nu
         }
         addLog(regiment.name + " prend une case à " + stateById(stateId).name + " sur " + stateById(targetOwner).name + ". Résistance estimée : " + defence + " ; effectif engagé : " + troopCount + " ; pertes : " + attackerLosses + ".");
       } else {
-        addLog(regiment.name + " occupe une case neutre.");
+        addLog(advancingToFront
+          ? regiment.name + " progresse vers le front en occupant une position neutre accessible avant d'attaquer la cellule " + requestedCell + "."
+          : regiment.name + " occupe une case neutre.");
       }
     } else {
       addLog(advancingToFront
