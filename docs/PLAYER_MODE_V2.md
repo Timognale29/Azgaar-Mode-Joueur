@@ -1,38 +1,40 @@
-# Mode Joueur V2 — interaction native sur la carte
+# Mode Joueur V2 — guide intégré
 
-Le mode campagne ne remplace pas les menus d'Azgaar. La carte reste l'interface principale et les actions s'ouvrent dans les éditeurs natifs de l'application.
+Le mode joueur conserve la carte et les fenêtres natives d'Azgaar. Le tutoriel détaillé est accessible à tout moment par le bouton **Aide** du bandeau de campagne.
 
-## Commandes globales
-- Un petit HUD affiche l'horloge, la pause, la vitesse et le retour Sandbox.
-- Le temps avance en continu ; l'économie et la démographie sont recalculées par jour de jeu.
-- Le choix du pays est explicite et reste lié à la campagne.
-- Le retour Sandbox conserve la sauvegarde et réactive les outils libres d'Azgaar.
+## Bandeau de campagne
+- **Jouer** démarre une campagne et demande quel État diriger.
+- **▶ / Ⅱ** reprend ou met le temps en pause.
+- **×1 / ×2 / ×4** règle la vitesse. Une heure de jeu prend dix secondes réelles à ×1 ; une journée économique est donc recalculée toutes les quatre minutes à ×1.
+- **Sandbox** quitte la campagne sans supprimer sa sauvegarde et réactive les outils libres d'Azgaar.
+- **Aide** ouvre le tutoriel étape par étape.
+- **Réinitialiser** demande confirmation, restaure la carte initiale de la campagne et efface sa progression.
 
-## Clic sur une ville
-- Le clic ouvre le véritable `BurgEditor` d'Azgaar.
-- Les champs qui permettent de tricher gratuitement (nom, population, culture, bâtiments, suppression, déplacement administratif) sont verrouillés en campagne.
-- Les décisions de jeu sont ajoutées à l'intérieur de cet éditeur : marché, développement urbain, remparts, citadelle et consultation de l'économie locale.
-- Chaque chantier vérifie le propriétaire et débite le trésor avant de modifier la carte.
+## Villes et gouvernement
+- Le clic sur une ville ouvre le véritable éditeur de ville Azgaar ; les commandes payantes sont ajoutées dans cette fenêtre.
+- Les aménagements incluent marché, développement urbain, remparts et citadelle.
+- Le clic sur une case territoriale ouvre le panneau du gouvernement ou des relations diplomatiques.
+- Les finances comprennent trésor, fiscalité et répartitions budgétaires.
 
-## Clic sur un territoire
-- Le clic ouvre une fenêtre native Azgaar avec les caractéristiques de l'État.
-- Pour l'État joueur : fiscalité, budget public et forces armées.
-- Pour les autres États : alliance, commerce, paix, guerre et embargo.
-- La compatibilité diplomatique s'appuie sur la culture, l'ascendance, le type culturel, la religion majoritaire, le régime, les voisins et les échanges.
+## Lever et commander les régiments
+1. Ouvrir le gouvernement de son propre pays.
+2. Dans **Forces armées**, cliquer sur **Lever un régiment** (coût : 90).
+3. Choisir le type de soldat et l'effectif dans la fenêtre du régiment, puis cliquer sur **Recruter**. Le recrutement est payé par le trésor.
+4. Cliquer sur le symbole du régiment sur la carte, puis sur **Déplacer / envahir**.
+5. Cliquer sur une case voisine. Pour parcourir une longue distance, avancer de case en case.
 
-## Armées
-- Les symboles de régiment sur la carte ouvrent le véritable `RegimentEditor`.
-- Les compositions libres sont verrouillées en campagne ; les recrutements passent par le registre militaire Azgaar, coûtent de l'argent et changent le vrai régiment.
-- Une nouvelle unité est levée à la capitale, puis peut être recrutée.
-- Un ordre de déplacement se termine par un clic sur la carte. Le moteur vérifie le propriétaire du territoire, le type terrestre/naval, la distance et le coût.
-- Les déplacements libres par glisser-déposer restent disponibles en Sandbox.
-- L'attaque utilise l'écran de bataille natif d'Azgaar.
+## Déclarer une guerre et conquérir
+- Cliquer sur le territoire du pays visé, ouvrir ses relations diplomatiques, puis **Déclarer la guerre** (mobilisation : 240).
+- Sélectionner un régiment terrestre, cliquer sur **Déplacer / envahir**, puis viser une case ennemie adjacente à sa position.
+- L'assaut est résolu automatiquement selon les effectifs du régiment et la résistance estimée de la case (population, présence d'une ville, remparts, citadelle et budget militaire du défenseur).
+- Si le régiment est assez puissant, la case rejoint le pays du joueur ; la ville qui s'y trouve change également de propriétaire. Si l'assaut est insuffisant, le jeu affiche l'effectif estimé nécessaire.
+- Les terres neutres peuvent être occupées sans déclaration de guerre, toujours en avançant sur des cases adjacentes.
+- Les flottes restent sur l'eau et ne prennent pas de territoires terrestres. Une capitale peut être prise si l'État défenseur possède une autre ville utilisable comme capitale.
 
-## Règle de campagne
-Les décisions sont vérifiées dans le moteur, et pas uniquement masquées dans l'interface : propriétaire de la ville, trésor disponible, composition, territoire accessible, type d'unité et coût de déplacement.
+## Ralentissements et sauvegarde
+- Le temps est ralenti par rapport aux premières versions, afin d'éviter de recalculer l'économie toutes les quelques secondes.
+- Le passage d'un onglet du navigateur en arrière-plan ne fait pas rattraper brutalement le temps perdu.
+- Les relations diplomatiques et les recherches de villes sont mises en cache pendant les recalculs quotidiens.
+- La campagne est sauvegardée lors des journées simulées, à la pause, à la sortie du mode et lorsque la page est quittée.
 
-## À développer ensuite
-- Trajets militaires en plusieurs étapes avec ravitaillement, fatigue et délai.
-- Recrutement limité par la population mobilisable et la capacité économique.
-- Actions propres aux régimes : décrets théocratiques, privilèges claniques, institutions républicaines, etc.
-- Événements locaux déclenchés par la culture, la religion, les ressources et les bâtiments de la ville.
+Les cartes particulièrement grandes peuvent encore ralentir lors d'un recalcul économique quotidien ; les optimisations réduisent les à-coups, sans garantir l'absence totale de ralentissements.
