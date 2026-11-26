@@ -301,13 +301,13 @@ function renderDialog(): void {
         </template>
         <div style="font-size: 1.2em; font-weight: bold; width: unset">
           <span>${t("Attackers")}</span>
-          <div class="battle-tactic-control" data-tip="${t("Choose a plan: each plan changes combat strength and losses")}">
-            <label for="battleTactic_attackers">${t("Plan")}</label>
+          <div class="battle-tactic-control" data-tip="Équilibré : aucun bonus. Offensive : +14 % de puissance hors retraite, mais +18 % de pertes. Défensive : +16 % dans les phases défensives, -6 % ailleurs et -22 % de pertes. Manœuvre : +18 % en poursuite et en phase mobile, +2 % ailleurs et -10 % de pertes.">
+            <label for="battleTactic_attackers">Plan</label>
             <select id="battleTactic_attackers" class="battle-tactic-select">
-              <option value="balanced">${t("Balanced")}</option>
-              <option value="aggressive">${t("Aggressive")}</option>
-              <option value="defensive">${t("Defensive")}</option>
-              <option value="mobile">${t("Mobile")}</option>
+              <option value="balanced">Équilibré</option>
+              <option value="aggressive">Offensive</option>
+              <option value="defensive">Défensive</option>
+              <option value="mobile">Manœuvre</option>
             </select>
           </div>
           <div style="float: right; font-size: 0.7em">
@@ -342,7 +342,7 @@ function renderDialog(): void {
         <div style="font-size: 1.2em; font-weight: bold; width: unset">
           <span>${t("Defenders")}</span>
           <div class="battle-tactic-control" data-tip="${t("Choose a plan: each plan changes combat strength and losses")}">
-            <label for="battleTactic_defenders">${t("Plan")}</label>
+            <label for="battleTactic_defenders">Plan</label>
             <select id="battleTactic_defenders" class="battle-tactic-select">
               <option value="balanced">${t("Balanced")}</option>
               <option value="aggressive">${t("Aggressive")}</option>
@@ -417,7 +417,7 @@ function renderDialog(): void {
         <button id="battleAddRegiment" data-tip="${t("Add regiment to the battle")}" class="icon-user-plus"></button>
         <button id="battleRoll" data-tip="${t("Roll dice to update random factor")}" class="icon-die"></button>
         <button id="battleRun" data-tip="${t("Resolve one combat round")}" class="icon-play"></button>
-        <button id="battleAuto" data-tip="${t("Resolve the battle automatically using the chosen plans")}" class="battle-auto-button">${t("Auto-resolve")}</button>
+        <button id="battleAuto" data-tip="Enchaîne les phases, relance les dés et applique les pertes à la fin du combat." class="battle-auto-button">Résolution auto</button>
         <button
           id="battleApply"
           data-tip="${t("End battle: apply current results and close the screen")}"
@@ -492,12 +492,12 @@ function changeTactic(event: Event, side: Side): void {
   battle[side].tactic = value;
   calculateStrength(side);
   const names: Record<BattleTactic, string> = {
-    balanced: t("Balanced"),
-    aggressive: t("Aggressive"),
-    defensive: t("Defensive"),
-    mobile: t("Mobile")
+    balanced: "Équilibré",
+    aggressive: "Offensive",
+    defensive: "Défensive",
+    mobile: "Manœuvre"
   };
-  tip(`${side === "attackers" ? t("Attackers") : t("Defenders")}: ${names[value]}`, true, "success", 1800);
+  tip(`${side === "attackers" ? "Attaquants" : "Défenseurs"} : plan ${names[value].toLowerCase()}`, true, "success", 1800);
 }
 
 function getTacticPowerFactor(side: BattleSide): number {
@@ -1252,7 +1252,7 @@ function runAutoBattle(): void {
   const b = battle;
   if (!b) return;
   if (!b.attackers.power || !b.defenders.power) {
-    tip(t("Both sides need at least one effective unit"), false, "warn");
+    tip("Chaque camp doit disposer d’au moins une unité efficace.", false, "warn");
     return;
   }
 
@@ -1279,7 +1279,7 @@ function runAutoBattle(): void {
   }
 
   b.automatic = true;
-  tip(t("Battle automatically resolved in {{rounds}} rounds", {rounds}), true, "success", 3500);
+  tip(`Bataille résolue automatiquement en ${rounds} phases.`, true, "success", 3500);
   applyResults();
 }
 
@@ -1496,7 +1496,7 @@ function applyResults(): void {
     legend += `<br><br>${t("Engagement progression")}:<br>${phasesText}`;
   }
 
-  if (b.automatic) legend += `<br><br>Combat resolution: automatic (${b.iteration} rounds), using the selected tactical plans.`;
+  if (b.automatic) legend += `<br><br>Résolution automatique : ${b.iteration} phases. Plans : attaquants ${b.attackers.tactic}, défenseurs ${b.defenders.tactic}.`;
   marker.note = legend;
 
   tip(t("{{battle}} is over. {{result}}", { battle: b.name, result }), true, "success", 4000);
