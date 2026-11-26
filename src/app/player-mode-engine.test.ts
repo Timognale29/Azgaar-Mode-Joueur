@@ -12,7 +12,11 @@ const mocks = vi.hoisted(() => ({
   militaryAdd: vi.fn(),
   militarySetUnits: vi.fn(),
   militaryMove: vi.fn(),
-  militarySetBase: vi.fn()
+  militarySetBase: vi.fn(),
+  setCells: vi.fn(),
+  getPoles: vi.fn(),
+  findNeighbors: vi.fn(),
+  collectStatistics: vi.fn()
 }));
 
 vi.mock("@/model/economy/accounts", () => ({
@@ -37,7 +41,11 @@ vi.mock("@/model/political/states-generator", () => ({
     setBudget: mocks.setBudget,
     setTariffs: mocks.setTariffs,
     setRelation: mocks.setRelation,
-    setPopulation: mocks.setPopulation
+    setPopulation: mocks.setPopulation,
+    setCells: mocks.setCells,
+    getPoles: mocks.getPoles,
+    findNeighbors: mocks.findNeighbors,
+    collectStatistics: mocks.collectStatistics
   }
 }));
 vi.mock("@/model/political/military-generator", () => ({
@@ -63,6 +71,8 @@ import {
   getCampaign,
   getFunds,
   getWarsForState,
+  resetCampaign,
+  setPlayerState,
   importCampaignData,
   negotiate,
   raiseRegiment,
@@ -106,13 +116,13 @@ function setupMap(): void {
   memory.clear();
   const states = [
     {i: 0, name: "Terres neutres", economy: finance(), diplomacy: []},
-    {i: 1, name: "Aster", fullName: "Royaume d'Aster", capital: 1, culture: 1, rural: 100, urban: 100, area: 30, alert: 2, neighbors: [2], diplomacy: [], economy: finance()},
-    {i: 2, name: "Boreal", fullName: "Duché de Boréal", capital: 2, culture: 2, rural: 100, urban: 100, area: 30, alert: 2, neighbors: [1], diplomacy: [], economy: finance()}
+    {i: 1, name: "Aster", fullName: "Royaume d'Aster", capital: 1, center: 0, culture: 1, rural: 100, urban: 100, area: 30, alert: 2, neighbors: [2], diplomacy: [], economy: finance(), provinces: []},
+    {i: 2, name: "Boreal", fullName: "Duché de Boréal", capital: 2, center: 2, culture: 2, rural: 100, urban: 100, area: 30, alert: 2, neighbors: [1], diplomacy: [], economy: finance(), provinces: []}
   ];
   const burgs = [
     {i: 0},
     {i: 1, name: "Aster-ville", state: 1, cell: 0, population: 100, capital: 1, feature: 1},
-    {i: 2, name: "Boreal-ville", state: 2, cell: 1, population: 100, capital: 1, feature: 1}
+    {i: 2, name: "Boreal-ville", state: 2, cell: 2, population: 100, capital: 1, feature: 1}
   ];
   globalThis.pack = {
     states,
@@ -121,15 +131,16 @@ function setupMap(): void {
     routes: [],
     deals: [],
     cells: {
-      i: [0, 1],
-      state: [1, 0],
-      h: [30, 30],
-      pop: [0, 0],
-      p: [[100, 100], [120, 100]],
-      c: [[1], [0]],
-      biome: [0, 0],
-      burg: [1, 2],
-      routes: [{}, {}]
+      i: [0, 1, 2],
+      state: [1, 0, 2],
+      h: [30, 30, 30],
+      pop: [0, 0, 0],
+      p: [[100, 100], [120, 100], [140, 100]],
+      c: [[1], [0, 2], [1]],
+      biome: [0, 0, 0],
+      burg: [1, 0, 2],
+      province: [0, 0, 0],
+      routes: [{}, {}, {}]
     },
     biomes: [{habitability: 100}],
     provinces: []
@@ -163,6 +174,13 @@ function setupMap(): void {
   mocks.setRelation.mockImplementation((a: number, b: number, relation: string) => {
     pack.states[a]!.diplomacy![b] = relation;
     pack.states[b]!.diplomacy![a] = relation;
+  });
+  mocks.setCells.mockImplementation((stateId: number, cellIds: number[]) => {
+    for (const cellId of cellIds) {
+      pack.cells.state[cellId] = stateId;
+      const burgId = pack.cells.burg[cellId];
+      if (burgId) pack.burgs[burgId]!.state = stateId;
+    }
   });
   mocks.setPopulation.mockImplementation((stateId: number, rural: number, urban: number) => {
     pack.states[stateId]!.rural = rural;
@@ -388,19 +406,34 @@ describe("player mode campaign engine", () => {
 
     expect(cost).toBe(8);
     expect(regiment.cell).toBe(1);
+    expect(pack.cells.state[1]).toBe(1);
     expect(regiment.x).toBe(120);
     expect(regiment.y).toBe(100);
     expect(getFunds(1)).toBe(before - cost);
   });
 
-  it("refuses a move into foreign territory without charging", () => {
+  it("refuses to enter enemy land before a war has been declared", () => {
     const regiment = raiseRegiment(1);
     pack.cells.state[1] = 2;
     const before = getFunds(1);
 
-    expect(() => moveRegiment(1, regiment.i, 1)).toThrow("allié");
+    expect(() => moveRegiment(1, regiment.i, 1)).toThrow("déclarer la guerre");
     expect(getFunds(1)).toBe(before);
     expect(regiment.cell).toBe(0);
+  });
+
+  it("captures an adjacent enemy cell during a declared war with enough troops", () => {
+    const regiment = raiseRegiment(1);
+    recruitRegiment(1, regiment.i, "infantry", 100);
+    pack.cells.state[1] = 2;
+    negotiate(1, 2, "guerre");
+
+    const cost = moveRegiment(1, regiment.i, 1);
+
+    expect(cost).toBeGreaterThan(8);
+    expect(pack.cells.state[1]).toBe(1);
+    expect(regiment.cell).toBe(1);
+    expect(getWarsForState(1)[0].score).toBe(5);
   });
 
   it("charges initial war mobilization, recurring upkeep and advances the abstract war", () => {
@@ -427,6 +460,20 @@ describe("player mode campaign engine", () => {
     expect(getWarsForState(1)[0].status).toBe("ended");
     expect(pack.states[1]!.diplomacy![2]).toBe("Friendly");
     expect(getCampaign().treaties.some(treaty => treaty.kind === "paix" && treaty.status === "active")).toBe(true);
+  });
+
+  it("resets campaign progress and restores the map baseline", () => {
+    setPlayerState(1);
+    pack.cells.state[1] = 1;
+    pack.states[1]!.economy.salesTax = 0.2;
+    pack.burgs[1]!.walls = 1;
+    const restored = resetCampaign();
+
+    expect(restored).toBe(true);
+    expect(pack.cells.state[1]).toBe(0);
+    expect(pack.states[1]!.economy.salesTax).toBe(0.05);
+    expect(pack.burgs[1]!.walls).toBeUndefined();
+    expect(getCampaign().playerStateId).toBeNull();
   });
 
   it("exports and restores a campaign including a negative balance (debt)", () => {
