@@ -452,6 +452,20 @@ describe("player mode campaign engine", () => {
     expect(regiment.cell).toBe(0);
   });
 
+  it("uses enemy garrisons to defend a territory against invasion", () => {
+    const attacker = raiseRegiment(1);
+    recruitRegiment(1, attacker.i, "infantry", 100);
+    const defender = raiseRegiment(2);
+    recruitRegiment(2, defender.i, "infantry", 200);
+    defender.cell = 1;
+    pack.cells.state[1] = 2;
+    negotiate(1, 2, "guerre");
+
+    expect(() => moveRegiment(1, attacker.i, 1)).toThrow("Assaut trop faible");
+    expect(pack.cells.state[1]).toBe(2);
+    expect(attacker.cell).toBe(0);
+  });
+
   it("captures an adjacent enemy cell during a declared war with enough troops", () => {
     const regiment = raiseRegiment(1);
     recruitRegiment(1, regiment.i, "infantry", 100);
