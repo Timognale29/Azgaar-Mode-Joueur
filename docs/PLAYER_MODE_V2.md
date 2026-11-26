@@ -66,3 +66,13 @@ Chaque journée simulée donne maintenant un tour aux États non joués :
 - Les garnisons présentes sur une case et les troupes voisines renforcent sa défense contre les invasions.
 
 Le bouton **Journal** du bandeau donne accès aux 40 événements récents (diplomatie, recrutement, déplacements, conquêtes et conflits).
+
+## Ajustements de guerre et progression vers le front
+
+- Une commande de déplacement peut viser directement une case ennemie éloignée. Si le régiment n'est pas au contact, le moteur calcule la première étape terrestre accessible sur le chemin le plus court vers une case voisine de la cible. Il faut relancer l'ordre jusqu'au contact, puis le dernier ordre déclenche l'assaut.
+- La position réelle du régiment est résolue avec l'index spatial natif d'Azgaar, afin d'éviter les refus provoqués par un identifiant de cellule devenu obsolète.
+- Une conquête par le joueur déclenche une mobilisation immédiate du défenseur : recrutement de renforts si ses finances le permettent, puis manœuvre militaire à son prochain tour.
+- Les objectifs de recrutement IA en guerre dépendent de la population et de la taille des armées adverses ; les armées de guerre peuvent atteindre douze régiments.
+- L'IA peut progresser à travers les terres neutres pour atteindre un front, et pas uniquement rester bloquée dans ses propres cellules.
+- Les garnisons et l'appui des cases voisines pèsent davantage dans la résistance territoriale.
+- Les assauts victorieux coûtent désormais des effectifs à l'attaquant. Les garnisons vaincues se replient vers une cellule amie si possible et subissent des pertes ; celles sans voie de repli sont dissoutes.
