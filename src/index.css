@@ -1092,6 +1092,59 @@ fieldset {
   width: 100%;
 }
 
+.battle-tactic-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  margin-left: 0.7em;
+  font-size: 0.72em;
+  font-weight: normal;
+  vertical-align: middle;
+}
+.battle-tactic-select {
+  width: auto;
+  max-width: 9.5em;
+  min-height: 1.8em;
+  padding: 0.1em 0.25em;
+  border: 1px solid #aaa;
+  border-radius: 3px;
+  background: #fff;
+  color: #242424;
+  font: inherit;
+  cursor: pointer;
+}
+.battle-auto-button {
+  padding: 0.35em 0.65em;
+  border: 1px solid #7d8f6e;
+  border-radius: 3px;
+  background: #e7efdf;
+  color: #263b25;
+  font-weight: 700;
+  cursor: pointer;
+}
+.battle-auto-button:hover {
+  background: #d7e5cb;
+}
+.battle-auto-button:focus-visible,
+.battle-tactic-select:focus-visible {
+  outline: 2px solid #446e9c;
+  outline-offset: 2px;
+}
+@media screen and (max-width: 600px) {
+  .battle-tactic-control {
+    display: flex;
+    margin: 0.2em 0;
+    font-size: 0.8em;
+  }
+  .battle-tactic-select {
+    max-width: 7.5em;
+  }
+  .battle-auto-button {
+    padding: 0.25em 0.4em;
+    font-size: 0.85em;
+  }
+}
+
 #battleBody > table .regiment {
   width: 16em;
   max-width: 16em;
