@@ -544,7 +544,9 @@ describe("player mode campaign engine", () => {
     expect(pack.cells.state[1]).toBe(1);
     expect(pack.states[2]!.military!.some((regiment: any) => regiment.i === defender.i)).toBe(true);
     expect(defender.cell).toBe(2);
-    expect(defender.a).toBeLessThan(40);
+    expect(mocks.militarySetUnits.mock.calls.some((call: [number, number, Record<string, number>]) =>
+      call[0] === 2 && call[1] === defender.i && call[2].infantry < 40
+    )).toBe(true);
   });
 
   it("mobilizes AI reinforcements immediately after a player captures a border cell", () => {
