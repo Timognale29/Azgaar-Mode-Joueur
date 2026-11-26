@@ -362,6 +362,91 @@ function prepareStateCenterForCapture(ownerId: number, targetCell: number): void
   }
 }
 
+/** Resolve the regiment's actual map cell from its position; cell can become stale after native editor moves. */
+function getRegimentCell(regiment: Regiment): number {
+  const cells = globalThis.pack.cells;
+  const x = Number(regiment.x);
+  const y = Number(regiment.y);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return Number(regiment.cell);
+  let nearest = Number(regiment.cell);
+  let nearestDistance = Number.POSITIVE_INFINITY;
+  for (const cell of cells.i) {
+    const point = cells.p[cell];
+    if (!point) continue;
+    const dx = point[0] - x;
+    const dy = point[1] - y;
+    const distance = dx * dx + dy * dy;
+    if (distance < nearestDistance) {
+      nearestDistance = distance;
+      nearest = cell;
+    }
+  }
+  return nearest;
+}
+
+function applyRegimentLosses(stateId: number, regiment: Regiment, losses: number): number {
+  const composition = Object.fromEntries(
+    Object.entries(regiment.u ?? {}).map(([unit, amount]) => [unit, Military.getTroops(amount)])
+  );
+  const total = Object.values(composition).reduce((sum, amount) => sum + amount, 0);
+  const actualLosses = Math.min(total, Math.max(0, Math.floor(losses)));
+  if (!actualLosses || !total) return 0;
+
+  const remaining = {...composition};
+  let assigned = 0;
+  for (const [unit, amount] of Object.entries(composition)) {
+    const loss = Math.min(amount, Math.floor(actualLosses * amount / total));
+    remaining[unit] = amount - loss;
+    assigned += loss;
+  }
+  let unassigned = actualLosses - assigned;
+  for (const unit of Object.keys(remaining).sort((a, b) => composition[b] - composition[a])) {
+    if (!unassigned) break;
+    if (remaining[unit] > 0) {
+      remaining[unit]--;
+      unassigned--;
+    }
+  }
+  Military.setUnits(stateId, regiment.i, remaining);
+  return actualLosses - unassigned;
+}
+
+function retreatGarrisonsFromCapturedCell(defenderId: number, cellId: number): void {
+  const defender = stateById(defenderId);
+  const cells = globalThis.pack.cells;
+  const neighbors = (cells.c?.[cellId] ?? []).filter(neighbor =>
+    cells.h[neighbor] >= 20 && Number(cells.state[neighbor]) === defenderId
+  );
+  const capitalCell = globalThis.pack.burgs[defender.capital]?.cell;
+  const retreatCell = neighbors.sort((a, b) => {
+    if (capitalCell === undefined) return a - b;
+    const pa = cells.p[a];
+    const pb = cells.p[b];
+    const pc = cells.p[capitalCell];
+    return Math.hypot(pa[0] - pc[0], pa[1] - pc[1]) - Math.hypot(pb[0] - pc[0], pb[1] - pc[1]);
+  })[0];
+
+  for (const garrison of [...(defender.military ?? [])].filter(regiment => !regiment.n && getRegimentCell(regiment) === cellId)) {
+    if (!retreatCell) {
+      Military.remove(defenderId, garrison.i);
+      addLog(garrison.name + " est capturé et dissous après la perte de sa position.");
+      continue;
+    }
+    const troops = Military.getTroops(garrison.a);
+    const losses = Math.max(1, Math.ceil(troops * 0.3));
+    applyRegimentLosses(defenderId, garrison, losses);
+    const point = cells.p[retreatCell];
+    Military.move(defenderId, garrison.i, point[0], point[1]);
+    Military.setBase(defenderId, garrison.i, point[0], point[1]);
+    garrison.cell = retreatCell;
+    const mergeTarget = (defender.military ?? []).find(candidate =>
+      candidate.i !== garrison.i && !candidate.n && getRegimentCell(candidate) === retreatCell
+    );
+    if (mergeTarget) Military.attach(defenderId, garrison.i, defenderId, mergeTarget.i);
+    addLog(garrison.name + " se replie après la chute de sa position et subit " + losses + " pertes.");
+  }
+}
+
 /** Move a regiment. Neutral cells can be occupied; enemy cells can only be taken during a declared war. */
 export function moveRegiment(stateId: number, regimentId: number, targetCell: number): number {
   const state = stateById(stateId);
@@ -376,10 +461,11 @@ export function moveRegiment(stateId: number, regimentId: number, targetCell: nu
   const neutralLand = targetOwner === 0 && cells.h[targetCell] >= 20;
   if (hostile && !getActiveWar(stateId, targetOwner))
     throw new Error("Il faut d'abord déclarer la guerre à cet État depuis son panneau diplomatique.");
+  const originCell = getRegimentCell(regiment);
   if (hostile || neutralLand) {
-    const neighbors = cells.c?.[regiment.cell] ?? [];
+    const neighbors = cells.c?.[originCell] ?? [];
     if (!neighbors.includes(targetCell))
-      throw new Error("Pour conquérir, avance de cellule en cellule : choisis une case qui touche la position actuelle du régiment.");
+      throw new Error("Cette case n'est pas directement voisine de la position réelle du régiment. Choisis une case adjacente ou avance par étapes.");
   }
   if (targetOwner !== 0 && targetOwner !== stateId && !hostile && getAttitude(stateId, targetOwner) !== "Ally")
     throw new Error("Le passage sur ce territoire n'est pas autorisé.");
@@ -414,9 +500,13 @@ export function moveRegiment(stateId: number, regimentId: number, targetCell: nu
     if (hostile || neutralLand) {
       States.setCells(stateId, [targetCell]);
       if (hostile) {
+        const ratio = troopCount / Math.max(1, defence);
+        const lossRate = clamp(0.05 + 0.28 / Math.sqrt(Math.max(1, ratio)), 0.07, 0.34);
+        const attackerLosses = applyRegimentLosses(stateId, regiment, Math.max(1, Math.ceil(troopCount * lossRate)));
+        retreatGarrisonsFromCapturedCell(targetOwner, targetCell);
         const war = getActiveWar(stateId, targetOwner);
         if (war) war.score = clamp(war.score + (war.attacker === stateId ? 5 : -5), -100, 100);
-        addLog(regiment.name + " prend une case à " + stateById(stateId).name + " sur " + stateById(targetOwner).name + ". Résistance estimée : " + defence + " ; effectif engagé : " + troopCount + ".");
+        addLog(regiment.name + " prend une case à " + stateById(stateId).name + " sur " + stateById(targetOwner).name + ". Résistance estimée : " + defence + " ; effectif engagé : " + troopCount + " ; pertes : " + attackerLosses + ".");
       } else {
         addLog(regiment.name + " occupe une case neutre.");
       }
@@ -426,7 +516,7 @@ export function moveRegiment(stateId: number, regimentId: number, targetCell: nu
 
     const compatibleUnits = (state.military ?? []).filter(candidate =>
       candidate.i !== regimentId &&
-      candidate.cell === targetCell &&
+      getRegimentCell(candidate) === targetCell &&
       Boolean(candidate.n) === Boolean(regiment.n)
     );
     if (compatibleUnits.length) {
@@ -1250,9 +1340,12 @@ function recruitAINation(stateId: number, turn: number): void {
   const regiments = (state.military ?? []).filter(regiment => !regiment.n);
   const troops = countStateTroops(stateId);
   const population = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
-  const targetStrength = clamp(Math.round(population * 0.012), 160, 1200);
-  const firstMobilization = troops < 1;
-  if (troops >= targetStrength || (!firstMobilization && turn - memory.lastRecruitTurn < 4)) return;
+  const atWar = getOrCreateCampaign().wars.some(war =>
+    war.status === "active" && (war.attacker === stateId || war.defender === stateId)
+  );
+  const targetStrength = clamp(Math.round(population * (atWar ? 0.035 : 0.018)), atWar ? 300 : 180, atWar ? 5000 : 2800);
+  const cooldown = atWar ? 1 : 3;
+  if (troops >= targetStrength || turn - memory.lastRecruitTurn < cooldown) return;
 
   const availableUnits = options.map.military.units ?? [];
   const preferred = availableUnits.find(unit => unit.type === "melee") ??
@@ -1260,29 +1353,32 @@ function recruitAINation(stateId: number, turn: number): void {
     availableUnits[0];
   if (!preferred) return;
 
+  const maxRegiments = atWar ? 6 : 4;
   let regiment = regiments
-    .filter(candidate => Military.getTroops(candidate.a) > 0)
-    .sort((a, b) => Military.getTroops(b.a) - Military.getTroops(a.a))[0];
-  if (!regiment) {
-    regiment = regiments[0];
-    if (!regiment) {
-      try {
-        regiment = raiseRegiment(stateId);
-      } catch {
-        return;
-      }
+    .filter(candidate => Military.getTroops(candidate.a) < 750)
+    .sort((a, b) => Military.getTroops(a.a) - Military.getTroops(b.a))[0];
+  if (!regiment && regiments.length < maxRegiments) {
+    try {
+      const capital = globalThis.pack.burgs[state.capital];
+      if (!capital || capital.removed) return;
+      const regimentId = Military.add(stateId, ...globalThis.pack.cells.p[capital.cell]);
+      regiment = state.military?.find(candidate => candidate.i === regimentId);
+    } catch {
+      return;
     }
   }
+  if (!regiment) regiment = regiments.sort((a, b) => Military.getTroops(a.a) - Military.getTroops(b.a))[0];
+  if (!regiment) return;
 
   const costPerTroop = Math.max(0.5, Math.min(2.5, 0.65 + Math.max(0, Number(preferred.power) || 0) * 0.12));
-  const reserve = 100;
+  const reserve = atWar ? 180 : 260;
   const affordable = Math.floor(Math.max(0, getFunds(stateId) - reserve) / costPerTroop);
-  const quantity = Math.min(250, Math.max(0, targetStrength - troops), affordable);
+  const quantity = Math.min(atWar ? 300 : 180, Math.max(0, targetStrength - troops), affordable);
   memory.lastRecruitTurn = turn;
   if (quantity < 1) return;
   try {
     recruitRegiment(stateId, regiment.i, preferred.name, quantity);
-    addLog("Le gouvernement de " + state.name + " recrute " + quantity + " " + preferred.name + " pour renforcer son armée.");
+    addLog("Le gouvernement de " + state.name + " recrute " + quantity + " " + preferred.name + (atWar ? " pour renforcer ses armées de guerre." : " pour constituer ses réserves."));
   } catch {
     // A lack of treasury or an unavailable unit must not interrupt the world simulation.
   }
@@ -1359,25 +1455,39 @@ function advanceAINationArmy(stateId: number, turn: number): void {
   );
   if (!activeWars.length) return;
   const state = stateById(stateId);
-  const regiment = (state.military ?? [])
+  const capitalCell = globalThis.pack.burgs[state.capital]?.cell;
+  const available = (state.military ?? [])
     .filter(candidate => !candidate.n && Military.getTroops(candidate.a) >= 80)
-    .sort((a, b) => Military.getTroops(b.a) - Military.getTroops(a.a))[0];
-  if (!regiment) return;
+    .sort((a, b) => Military.getTroops(b.a) - Military.getTroops(a.a));
+  if (!available.length) return;
+
+  // Preserve a capital garrison when the nation has multiple formed regiments.
+  const movable = available.length > 1
+    ? available.filter(regiment => getRegimentCell(regiment) !== capitalCell)
+    : available;
+  const forces = (movable.length ? movable : available).slice(0, 2);
+  const usedSteps = new Set<number>();
+  let moved = 0;
 
   for (const war of activeWars) {
     const enemyId = war.attacker === stateId ? war.defender : war.attacker;
-    const step = findAIFrontlineStep(stateId, enemyId, regiment);
-    if (step === null) continue;
-    memory.lastMilitaryTurn = turn;
-    try {
-      const previousOwner = Number(globalThis.pack.cells.state[step] ?? 0);
-      moveRegiment(stateId, regiment.i, step);
-      const captured = previousOwner === enemyId && Number(globalThis.pack.cells.state[step]) === stateId;
-      if (captured) addLog(state.name + " conquiert une position sur " + stateById(enemyId).name + " grâce à son armée.");
-    } catch {
-      // The AI will regroup or recruit and try again on a later day.
+    for (const regiment of forces) {
+      if (moved >= 2) break;
+      const step = findAIFrontlineStep(stateId, enemyId, regiment);
+      if (step === null || usedSteps.has(step)) continue;
+      memory.lastMilitaryTurn = turn;
+      try {
+        const previousOwner = Number(globalThis.pack.cells.state[step] ?? 0);
+        moveRegiment(stateId, regiment.i, step);
+        usedSteps.add(step);
+        moved++;
+        const captured = previousOwner === enemyId && Number(globalThis.pack.cells.state[step]) === stateId;
+        if (captured) addLog(state.name + " conquiert une position sur " + stateById(enemyId).name + " grâce à son armée.");
+        else addLog(state.name + " renforce son front contre " + stateById(enemyId).name + ".");
+      } catch {
+        // The AI will regroup or recruit and try again on a later day.
+      }
     }
-    return;
   }
 }
 
