@@ -152,14 +152,14 @@ const tutorialPages: TutorialPage[] = [
     paragraphs: [
       "Ouvre ton gouvernement, rubrique Forces armées, puis clique sur Lever un régiment. La levée coûte 90 et crée un régiment vide.",
       "Dans sa fenêtre de commandement, choisis un type d'unité et un effectif, puis clique sur Recruter. Les soldats sont payés par le trésor de ton pays.",
-      "Clique ensuite sur le symbole du régiment sur la carte. Choisis Déplacer / envahir, puis clique sur une case terrestre voisine. Pour avancer loin, donne plusieurs ordres successifs de case en case."
+      "Clique ensuite sur le symbole du régiment sur la carte. Choisis Déplacer / envahir, puis clique directement sur la case ennemie que tu vises. Si elle est trop loin, le régiment avance automatiquement d'une étape accessible vers le front ; reclique sur la cible jusqu'à être au contact."
     ]
   },
   {
     title: "Envahir et prendre des territoires",
     paragraphs: [
       "Pour attaquer un autre pays, clique sur son territoire, ouvre les Relations diplomatiques et choisis Déclarer la guerre. La déclaration seule ne prend aucune terre.",
-      "Sélectionne un régiment terrestre, clique sur Déplacer / envahir, puis sur une case ennemie qui touche sa position actuelle. L'assaut est automatique : effectifs, population locale, ville, remparts, citadelle et budget militaire déterminent la résistance.",
+      "Sélectionne un régiment terrestre, clique sur Déplacer / envahir, puis vise directement la case ennemie. Si elle est éloignée, le régiment emprunte une étape terrestre accessible vers le front. Quand il est adjacent à la cible, reclique pour lancer l'assaut. La résistance dépend des effectifs, des garnisons, de la population, des remparts et de la citadelle.",
       "Si le régiment est assez puissant, la case rejoint ton pays. Les frontières et le propriétaire de la ville située sur cette case sont mis à jour. Sinon, le jeu t'indique qu'il faut renforcer le régiment ou viser une case moins défendue.",
       "Les cases neutres peuvent aussi être occupées, en avançant de proche en proche. Les flottes se déplacent sur l'eau mais ne conquièrent pas de cases terrestres. Une capitale peut être déplacée si le pays possède une autre ville ; son dernier centre urbain reste protégé."
     ]
@@ -739,7 +739,7 @@ function openRegimentCommand(stateId: number, regimentId: number): void {
   const orderButtons = element("div", "player-regiment-order-buttons");
   orderButtons.append(nativeActionButton("Déplacer / envahir", () => {
     pendingMove = {stateId, regimentId};
-    if (statusLabel) statusLabel.textContent = "Clique sur une case voisine à rejoindre ou conquérir";
+    if (statusLabel) statusLabel.textContent = "Clique sur une case à rejoindre ou une cible ennemie : le régiment cherchera le front";
     Dialog.close("playerRegimentCommand");
     updateHud();
   }, "player-regiment-button"));
@@ -750,7 +750,7 @@ function openRegimentCommand(stateId: number, regimentId: number): void {
   }, "player-regiment-button"));
   orders.append(orderButtons);
   orders.append(element("p", "player-regiment-muted", "Combat : ouvre l'éditeur Azgaar, puis utilise son bouton d'attaque pour choisir un régiment ennemi. Valide les résultats pour appliquer les pertes ; les régiments entièrement détruits seront supprimés."));
-  orders.append(element("p", "player-regiment-muted", "Conquête : déclare d'abord la guerre, puis choisis une case terrestre voisine avec « Déplacer / envahir ». L'assaut territorial automatique dépend des effectifs et des défenses de la case."));
+  orders.append(element("p", "player-regiment-muted", "Conquête : déclare d'abord la guerre, puis vise directement la case ennemie avec « Déplacer / envahir ». Si elle est éloignée, le régiment avance vers le front par une étape terrestre accessible. Une fois au contact, reclique pour attaquer ; les garnisons et les défenses comptent."));
   body.append(orders);
 
   Dialog.message({
