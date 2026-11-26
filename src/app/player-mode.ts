@@ -55,7 +55,6 @@ let modeButton: HTMLButtonElement | null = null;
 let helpButton: HTMLButtonElement | null = null;
 let resetButton: HTMLButtonElement | null = null;
 let pendingMove: MoveOrder | null = null;
-let lastCampaignSave = 0;
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text = ""): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -334,7 +333,6 @@ function toggleMode(): void {
 function tick(): void {
   if (timer !== null) return;
   lastTick = Date.now();
-  lastCampaignSave = lastTick;
   timer = window.setInterval(() => {
     const now = Date.now();
     if (document.hidden) {
@@ -348,11 +346,9 @@ function tick(): void {
       return;
     }
     try {
-      const result = advanceClock(playerStateId, elapsed * speed);
-      if (now - lastCampaignSave >= 15000) {
-        saveCampaign();
-        lastCampaignSave = now;
-      }
+      // One in-game hour takes ten real seconds at ×1 (a day every four minutes).
+      // This avoids triggering the full economy simulation every few seconds.
+      const result = advanceClock(playerStateId, elapsed * speed / 10);
       updateHud();
       if (result.days > 0) {
         Layers.draw("states", "borders", "provinces", "military", "burgIcons", "labels");
@@ -376,7 +372,6 @@ function createHud(): void {
     lastTick = Date.now();
     if (paused) {
       saveCampaign();
-      lastCampaignSave = lastTick;
     }
     updateHud();
   }, "player-campaign-hud-button");
