@@ -370,7 +370,7 @@ function findFriendlyApproachStep(stateId: number, originCell: number, enemyCell
   );
   let best: {step: number; length: number} | null = null;
   for (const approach of approaches) {
-    if (approach === originCell) return approach;
+    if (approach === originCell) continue;
     try {
       const route = findLandPath(originCell, approach, stateId);
       if (route.cells.length < 2) continue;
