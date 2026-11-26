@@ -374,6 +374,10 @@ function createHud(): void {
   pauseButton = actionButton("Ⅱ", () => {
     paused = !paused;
     lastTick = Date.now();
+    if (paused) {
+      saveCampaign();
+      lastCampaignSave = lastTick;
+    }
     updateHud();
   }, "player-campaign-hud-button");
   speedButton = actionButton("×1", () => {
@@ -814,6 +818,7 @@ export const PlayerMode = {
       }
     });
     if (playerStateId) applyCampaignMode(true);
+    window.addEventListener("pagehide", () => saveCampaign());
     tick();
   }
 };
