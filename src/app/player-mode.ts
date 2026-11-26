@@ -20,11 +20,14 @@ import {
   getPlayerStateId,
   getStateIdentity,
   getStateEconomy,
+  getWarsForState,
   marketCostFor,
   negotiate,
   raiseRegiment,
   recruitRegiment,
   moveRegiment,
+  resetCampaign,
+  saveCampaign,
   relationScore,
   setBudget,
   setEmbargo,
@@ -49,7 +52,10 @@ let statusLabel: HTMLElement | null = null;
 let pauseButton: HTMLButtonElement | null = null;
 let speedButton: HTMLButtonElement | null = null;
 let modeButton: HTMLButtonElement | null = null;
+let helpButton: HTMLButtonElement | null = null;
+let resetButton: HTMLButtonElement | null = null;
 let pendingMove: MoveOrder | null = null;
+let lastCampaignSave = 0;
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className = "", text = ""): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -91,6 +97,125 @@ function notify(title: string, message: string): void {
   Dialog.message({id: "playerCampaignNotice", title, message: body, width: "24em"});
 }
 
+type TutorialPage = {title: string; paragraphs: string[]};
+const tutorialPages: TutorialPage[] = [
+  {
+    title: "Démarrer une campagne",
+    paragraphs: [
+      "Clique sur Jouer, puis choisis le pays que tu souhaites diriger. Le choix reste associé à cette carte.",
+      "Le petit bandeau affiche le jour et l'heure. ▶ / Ⅱ met le temps en pause ou le relance ; ×1, ×2 et ×4 règlent la vitesse.",
+      "Aide reste disponible dans la barre. La campagne se sauvegarde automatiquement dans ce navigateur."
+    ]
+  },
+  {
+    title: "Lire et gérer la carte",
+    paragraphs: [
+      "Clique sur une ville pour ouvrir l'éditeur de ville original d'Azgaar. Les commandes de campagne sont ajoutées dans cette même fenêtre, sous les informations de la ville.",
+      "Clique sur une case d'un territoire, loin des villes, pour ouvrir le gouvernement de ce pays. Depuis une ville, le bouton Gouvernement ouvre aussi le panneau de son État.",
+      "En mode campagne, les modifications gratuites de la carte sont verrouillées ; passe en Sandbox pour retrouver les outils libres d'Azgaar."
+    ]
+  },
+  {
+    title: "Économie et villes",
+    paragraphs: [
+      "Dans ton gouvernement, consulte le trésor et la population. Les taxes et les postes budgétaires modifient les finances lors des prochains jours simulés.",
+      "Dans l'éditeur d'une de tes villes, construis un marché, développe la ville, ou ajoute des remparts et une citadelle. Chaque action coûte de l'argent et certains bâtiments ont un entretien quotidien.",
+      "Surveille le trésor : les ordres militaires, les projets et une guerre peuvent coûter de l'argent."
+    ]
+  },
+  {
+    title: "Lever et commander une armée",
+    paragraphs: [
+      "Ouvre ton gouvernement, rubrique Forces armées, puis clique sur Lever un régiment. La levée coûte 90 et crée un régiment vide.",
+      "Dans sa fenêtre de commandement, choisis un type d'unité et un effectif, puis clique sur Recruter. Les soldats sont payés par le trésor de ton pays.",
+      "Clique ensuite sur le symbole du régiment sur la carte. Choisis Déplacer / envahir, puis clique sur une case terrestre voisine. Pour avancer loin, donne plusieurs ordres successifs de case en case."
+    ]
+  },
+  {
+    title: "Envahir et prendre des territoires",
+    paragraphs: [
+      "Pour attaquer un autre pays, clique sur son territoire, ouvre les Relations diplomatiques et choisis Déclarer la guerre. La déclaration seule ne prend aucune terre.",
+      "Sélectionne un régiment terrestre, clique sur Déplacer / envahir, puis sur une case ennemie qui touche sa position actuelle. L'assaut est automatique : effectifs, population locale, ville, remparts, citadelle et budget militaire déterminent la résistance.",
+      "Si le régiment est assez puissant, la case rejoint ton pays. Les frontières et le propriétaire de la ville située sur cette case sont mis à jour. Sinon, le jeu t'indique qu'il faut renforcer le régiment ou viser une case moins défendue.",
+      "Les cases neutres peuvent aussi être occupées, en avançant de proche en proche. Les flottes se déplacent sur l'eau mais ne conquièrent pas de cases terrestres. Une capitale peut être déplacée si le pays possède une autre ville ; son dernier centre urbain reste protégé."
+    ]
+  },
+  {
+    title: "Diplomatie, pause et remise à zéro",
+    paragraphs: [
+      "Les relations permettent de proposer des alliances, des accords commerciaux, des embargos et la paix. Une guerre se poursuit au fil des jours et coûte de l'argent à chaque camp.",
+      "Réinitialiser efface la progression de la campagne et restaure la carte telle qu'elle était au démarrage de cette partie : frontières, villes, bâtiments, budgets, relations, armées et projets.",
+      "La remise à zéro demande toujours confirmation. Après le reset, clique sur Jouer pour choisir un pays et recommencer."
+    ]
+  }
+];
+
+function showTutorial(page = 0): void {
+  const index = Math.max(0, Math.min(tutorialPages.length - 1, page));
+  const current = tutorialPages[index];
+  const body = element("div", "player-campaign-dialog-body player-tutorial-body");
+  body.append(element("div", "player-tutorial-progress", "Étape " + (index + 1) + " / " + tutorialPages.length));
+  body.append(element("h3", "player-tutorial-title", current.title));
+  for (const paragraph of current.paragraphs) body.append(element("p", "player-tutorial-paragraph", paragraph));
+  const navigation = element("div", "player-tutorial-navigation");
+  navigation.append(actionButton("Précédent", () => {
+    Dialog.close("playerTutorial");
+    showTutorial(index - 1);
+  }, "player-campaign-button"));
+  navigation.append(actionButton(index === tutorialPages.length - 1 ? "Terminer" : "Suivant", () => {
+    Dialog.close("playerTutorial");
+    if (index < tutorialPages.length - 1) showTutorial(index + 1);
+  }, "player-campaign-primary"));
+  body.append(navigation);
+  Dialog.message({
+    id: "playerTutorial",
+    title: "Guide du mode joueur",
+    message: body,
+    width: "32em",
+    maxHeight: 680
+  });
+}
+
+function confirmReset(): void {
+  if (!playerStateId) {
+    notify("Aucune partie à réinitialiser", "Lance d'abord une campagne avec le bouton Jouer.");
+    return;
+  }
+  const body = element("div", "player-campaign-dialog-body");
+  body.append(element("p", "", "Cette action effacera la progression de la campagne et restaurera la carte de départ : territoires, villes, bâtiments, budgets, relations, armées et projets."));
+  body.append(element("p", "player-campaign-muted", "Cette opération est définitive pour cette partie."));
+  Dialog.message({
+    id: "playerResetConfirm",
+    title: "Réinitialiser la partie ?",
+    message: body,
+    width: "28em",
+    buttons: [
+      {
+        label: "Réinitialiser la partie",
+        className: "player-campaign-danger",
+        onClick: () => {
+          try {
+            const restored = resetCampaign();
+            playerStateId = null;
+            pendingMove = null;
+            paused = true;
+            applyCampaignMode(false);
+            Layers.drawAll();
+            updateHud();
+            Dialog.close("playerResetConfirm");
+            notify("Partie réinitialisée", restored
+              ? "La carte et la progression ont été restaurées. Clique sur Jouer pour choisir ton pays."
+              : "La progression a été effacée, mais cette ancienne sauvegarde n'avait pas de copie complète de la carte. Vérifie la carte avant de recommencer.");
+          } catch (error) {
+            notify("Réinitialisation impossible", error instanceof Error ? error.message : String(error));
+          }
+        }
+      },
+      {label: "Annuler"}
+    ]
+  });
+}
+
 function runAction(title: string, action: () => void, refresh?: () => void): void {
   try {
     action();
@@ -124,11 +249,13 @@ function updateHud(): void {
     speedButton.title = "Changer la vitesse";
   }
   if (modeButton) modeButton.textContent = campaignActive ? "Sandbox" : (playerStateId ? "Reprendre" : "Jouer");
+  if (resetButton) resetButton.disabled = !playerStateId;
   if (statusLabel && !pendingMove) statusLabel.textContent = campaignActive ? (paused ? "En pause" : "Campagne") : "Outils Azgaar libres";
 }
 
 function applyCampaignMode(active: boolean): void {
   if (!active && campaignActive) {
+    saveCampaign();
     paused = true;
     pendingMove = null;
   }
@@ -193,6 +320,7 @@ function openCountryPicker(): void {
 
 function toggleMode(): void {
   if (campaignActive) {
+    saveCampaign();
     applyCampaignMode(false);
     return;
   }
@@ -206,8 +334,13 @@ function toggleMode(): void {
 function tick(): void {
   if (timer !== null) return;
   lastTick = Date.now();
+  lastCampaignSave = lastTick;
   timer = window.setInterval(() => {
     const now = Date.now();
+    if (document.hidden) {
+      lastTick = now;
+      return;
+    }
     const elapsed = Math.min(2, Math.max(0, (now - lastTick) / 1000));
     lastTick = now;
     if (!campaignActive || paused || playerStateId === null || elapsed <= 0) {
@@ -216,9 +349,13 @@ function tick(): void {
     }
     try {
       const result = advanceClock(playerStateId, elapsed * speed);
+      if (now - lastCampaignSave >= 15000) {
+        saveCampaign();
+        lastCampaignSave = now;
+      }
       updateHud();
       if (result.days > 0) {
-        Layers.draw("military", "burgIcons", "labels");
+        Layers.draw("states", "borders", "provinces", "military", "burgIcons", "labels");
       }
     } catch (error) {
       paused = true;
@@ -240,11 +377,13 @@ function createHud(): void {
     updateHud();
   }, "player-campaign-hud-button");
   speedButton = actionButton("×1", () => {
-    speed = speed === 1 ? 2 : speed === 2 ? 4 : speed === 4 ? 8 : 1;
+    speed = speed === 1 ? 2 : speed === 2 ? 4 : 1;
     updateHud();
   }, "player-campaign-hud-button");
   modeButton = actionButton("Jouer", toggleMode, "player-campaign-hud-button player-campaign-mode-button");
-  hud.append(clockLabel, statusLabel, pauseButton, speedButton, modeButton);
+  helpButton = actionButton("Aide", () => showTutorial(), "player-campaign-hud-button");
+  resetButton = actionButton("Réinitialiser", confirmReset, "player-campaign-hud-button player-campaign-reset-button");
+  hud.append(clockLabel, statusLabel, pauseButton, speedButton, modeButton, helpButton, resetButton);
   document.body.append(hud);
   updateHud();
 }
@@ -308,7 +447,7 @@ function showStateActions(stateId: number): void {
     }, "player-campaign-primary"));
     body.append(taxSection);
 
-    const army = section("Forces armées", "Recrute des régiments, puis clique dessus sur la carte pour leur donner des ordres.");
+    const army = section("Forces armées", "Lève un régiment, recrute ses soldats, puis clique sur son symbole sur la carte pour le commander.");
     const regiments = state.military ?? [];
     if (!regiments.length) army.append(element("p", "player-campaign-muted", "Aucun régiment n'a encore été levé."));
     for (const regiment of regiments) {
@@ -332,28 +471,48 @@ function showStateActions(stateId: number): void {
     }, "player-campaign-primary"));
     body.append(army);
   } else {
-    const diplomacy = section("Relations diplomatiques", "L'IA prend en compte la culture, la religion, le régime, les voisins et les échanges.");
+    const diplomacy = section("Relations diplomatiques", "Les relations dépendent de la culture, de la religion, du régime, des voisins et des échanges.");
     diplomacy.append(
       line("Relations actuelles", getAttitude(playerStateId, stateId)),
       line("Compatibilité", String(Math.round(relationScore(playerStateId, stateId))))
     );
-    const actions: [string, "alliance" | "commerce" | "paix" | "guerre"][] = [
-      ["Proposer une alliance", "alliance"],
-      ["Proposer un traité commercial", "commerce"],
-      ["Proposer la paix", "paix"],
-      ["Déclarer la guerre", "guerre"]
-    ];
-    for (const [label, kind] of actions) {
-      diplomacy.append(actionButton(label, () => {
+    const activeWar = getWarsForState(playerStateId).find(war =>
+      war.status === "active" &&
+      ((war.attacker === playerStateId && war.defender === stateId) || (war.attacker === stateId && war.defender === playerStateId))
+    );
+    if (activeWar) {
+      const signedScore = activeWar.attacker === playerStateId ? activeWar.score : -activeWar.score;
+      diplomacy.append(line("Guerre en cours", "Tour " + activeWar.turns));
+      diplomacy.append(line("Avantage stratégique", (signedScore >= 0 ? "+" : "") + signedScore.toFixed(1)));
+      diplomacy.append(actionButton("Proposer la paix", () => {
         try {
-          const result = negotiate(playerStateId!, stateId, kind);
-          Layers.draw("states", "borders", "military");
+          const result = negotiate(playerStateId!, stateId, "paix");
           Dialog.close("playerStateDecisions");
-          notify(kind === "guerre" ? "Conflit" : "Diplomatie", result.accepted ? (state.name + " accepte la proposition.") : (state.name + " refuse la proposition."));
+          notify("Proposition de paix", result.accepted ? state.name + " accepte la paix." : state.name + " refuse pour le moment.");
         } catch (error) {
-          notify("Décision impossible", error instanceof Error ? error.message : String(error));
+          notify("Paix impossible", error instanceof Error ? error.message : String(error));
         }
-      }, kind === "guerre" ? "player-campaign-danger" : "player-campaign-button"));
+      }, "player-campaign-button"));
+    } else {
+      const actions: [string, "alliance" | "commerce" | "guerre"][] = [
+        ["Déclarer la guerre · 240", "guerre"],
+        ["Proposer une alliance", "alliance"],
+        ["Proposer un traité commercial", "commerce"]
+      ];
+      for (const [label, kind] of actions) {
+        diplomacy.append(actionButton(label, () => {
+          try {
+            const result = negotiate(playerStateId!, stateId, kind);
+            Layers.draw("states", "borders", "military");
+            Dialog.close("playerStateDecisions");
+            notify(kind === "guerre" ? "Guerre déclarée" : "Diplomatie", result.accepted
+              ? (kind === "guerre" ? "Tu es maintenant en guerre contre " + state.name + "." : state.name + " accepte la proposition.")
+              : (state.name + " refuse la proposition."));
+          } catch (error) {
+            notify("Décision impossible", error instanceof Error ? error.message : String(error));
+          }
+        }, kind === "guerre" ? "player-campaign-danger" : "player-campaign-button"));
+      }
     }
     diplomacy.append(actionButton("Décréter un embargo", () => {
       try {
@@ -550,21 +709,21 @@ function openRegimentCommand(stateId: number, regimentId: number): void {
   body.append(recruitment);
 
   const orders = element("section", "player-regiment-section");
-  orders.append(element("div", "player-regiment-section-title", "Ordres"));
+  orders.append(element("div", "player-regiment-section-title", "Ordres et conquête"));
   const orderButtons = element("div", "player-regiment-order-buttons");
-  orderButtons.append(nativeActionButton("Déplacer le régiment", () => {
+  orderButtons.append(nativeActionButton("Déplacer / envahir", () => {
     pendingMove = {stateId, regimentId};
-    if (statusLabel) statusLabel.textContent = "Clique sur la destination de " + regiment.name;
+    if (statusLabel) statusLabel.textContent = "Clique sur une case voisine à rejoindre ou conquérir";
     Dialog.close("playerRegimentCommand");
     updateHud();
   }, "player-regiment-button"));
-  orderButtons.append(nativeActionButton("Attaquer un régiment ennemi", () => {
+  orderButtons.append(nativeActionButton("Combat de régiments (Azgaar)", () => {
     Dialog.close("playerRegimentCommand");
     Controllers.RegimentEditor.open("#regiment" + stateId + "-" + regimentId);
     lockNativeRegimentEditor(stateId);
   }, "player-regiment-button"));
   orders.append(orderButtons);
-  orders.append(element("p", "player-regiment-muted", "Le combat utilise l'écran de bataille natif d'Azgaar."));
+  orders.append(element("p", "player-regiment-muted", "Pour prendre une terre ennemie : déclare d'abord la guerre, puis choisis une case terrestre voisine. L'assaut est résolu automatiquement selon les effectifs et les défenses de la case."));
   body.append(orders);
 
   Dialog.message({
@@ -591,9 +750,13 @@ function handleMapClick(event: Event): void {
     const order = pendingMove;
     pendingMove = null;
     try {
+      const previousOwner = Number(globalThis.pack.cells.state[cell] ?? 0);
       const cost = moveRegiment(order.stateId, order.regimentId, cell);
-      Layers.draw("military");
-      notify("Ordre exécuté", "Le régiment a atteint sa destination. Coût : " + formatMoney(cost) + ".");
+      const newOwner = Number(globalThis.pack.cells.state[cell] ?? 0);
+      Layers.draw("states", "borders", "provinces", "military", "burgIcons", "labels");
+      const captured = newOwner === order.stateId && previousOwner !== order.stateId;
+      notify(captured ? "Territoire conquis" : "Ordre exécuté",
+        (captured ? "La case a rejoint ton État." : "Le régiment a rejoint sa destination.") + " Coût : " + formatMoney(cost) + ".");
     } catch (error) {
       notify("Déplacement refusé", error instanceof Error ? error.message : String(error));
     }
