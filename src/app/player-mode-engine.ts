@@ -1340,10 +1340,18 @@ function recruitAINation(stateId: number, turn: number): void {
   const regiments = (state.military ?? []).filter(regiment => !regiment.n);
   const troops = countStateTroops(stateId);
   const population = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
-  const atWar = getOrCreateCampaign().wars.some(war =>
+  const activeWars = getOrCreateCampaign().wars.filter(war =>
     war.status === "active" && (war.attacker === stateId || war.defender === stateId)
   );
-  const targetStrength = clamp(Math.round(population * (atWar ? 0.035 : 0.018)), atWar ? 300 : 180, atWar ? 5000 : 2800);
+  const atWar = activeWars.length > 0;
+  const opposingTroops = activeWars.reduce((total, war) => {
+    const enemyId = war.attacker === stateId ? war.defender : war.attacker;
+    return total + countStateTroops(enemyId);
+  }, 0);
+  // AI mobilization scales with its population and the actual size of opposing field armies.
+  const targetStrength = atWar
+    ? clamp(Math.round(population * 0.025 + opposingTroops * 0.7), 400, 9000)
+    : clamp(Math.round(population * 0.018), 180, 2800);
   const cooldown = atWar ? 1 : 3;
   if (troops >= targetStrength || turn - memory.lastRecruitTurn < cooldown) return;
 
@@ -1353,7 +1361,7 @@ function recruitAINation(stateId: number, turn: number): void {
     availableUnits[0];
   if (!preferred) return;
 
-  const maxRegiments = atWar ? 6 : 4;
+  const maxRegiments = atWar ? 8 : 4;
   let regiment = regiments
     .filter(candidate => Military.getTroops(candidate.a) < 750)
     .sort((a, b) => Military.getTroops(a.a) - Military.getTroops(b.a))[0];
@@ -1370,9 +1378,9 @@ function recruitAINation(stateId: number, turn: number): void {
   if (!regiment) return;
 
   const costPerTroop = Math.max(0.5, Math.min(2.5, 0.65 + Math.max(0, Number(preferred.power) || 0) * 0.12));
-  const reserve = atWar ? 180 : 260;
+  const reserve = atWar ? 160 : 260;
   const affordable = Math.floor(Math.max(0, getFunds(stateId) - reserve) / costPerTroop);
-  const quantity = Math.min(atWar ? 300 : 180, Math.max(0, targetStrength - troops), affordable);
+  const quantity = Math.min(atWar ? 350 : 180, Math.max(0, targetStrength - troops), affordable);
   memory.lastRecruitTurn = turn;
   if (quantity < 1) return;
   try {
@@ -1394,10 +1402,10 @@ function estimateCellResistance(defenderId: number, cellId: number): number {
     const troops = Military.getTroops(regiment.a);
     const stationedCell = getRegimentCell(regiment);
     if (stationedCell === cellId) return total + troops;
-    if (neighbors.has(stationedCell)) return total + troops * 0.2;
+    if (neighbors.has(stationedCell)) return total + troops * 0.3;
     return total;
   }, 0);
-  const fieldDefence = Math.min(1000, garrison * 0.9);
+  const fieldDefence = Math.min(1600, garrison * 1.15);
   return Math.ceil(
     18 +
     Math.sqrt(Math.max(0, Number(cells.pop?.[cellId] ?? 0))) * 0.35 +
