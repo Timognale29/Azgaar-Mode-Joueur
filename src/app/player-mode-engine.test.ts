@@ -530,8 +530,8 @@ describe("player mode campaign engine", () => {
     expect(pack.cells.state[1]).toBe(1);
     expect(pack.states[2]!.military!.some((regiment: any) => regiment.i === defender.i)).toBe(true);
     expect(defender.cell).toBe(2);
-    expect(mocks.militarySetUnits.mock.calls.some((call: [number, number, Record<string, number>]) =>
-      call[0] === 2 && call[1] === defender.i && call[2].infantry < 40
+    expect(mocks.militarySetUnits.mock.calls.some(call =>
+      call[0] === 2 && call[1] === defender.i && Number(call[2]?.infantry ?? 0) < 40
     )).toBe(true);
   });
 
