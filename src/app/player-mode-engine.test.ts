@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   militarySetUnits: vi.fn(),
   militaryMove: vi.fn(),
   militarySetBase: vi.fn(),
+  militaryAttach: vi.fn(),
   setCells: vi.fn(),
   getPoles: vi.fn(),
   findNeighbors: vi.fn(),
@@ -54,7 +55,8 @@ vi.mock("@/model/political/military-generator", () => ({
     getTroops: (points = 0) => Math.ceil(points),
     setUnits: mocks.militarySetUnits,
     move: mocks.militaryMove,
-    setBase: mocks.militarySetBase
+    setBase: mocks.militarySetBase,
+    attach: mocks.militaryAttach
   }
 }));
 
@@ -190,7 +192,9 @@ function setupMap(): void {
     const state = pack.states[stateId]!;
     state.military ??= [];
     const i = state.military.length ? Math.max(...state.military.map((regiment: any) => regiment.i)) + 1 : 0;
-    state.military.push({i, a: 0, cell: 0, x, y, bx: x, by: y, state: stateId, n: 0, u: {}, name: "Aster Guard"} as any);
+    const cell = pack.cells.p.findIndex((point: number[]) => point[0] === x && point[1] === y);
+    const safeCell = Math.max(0, cell);
+    state.military.push({i, a: 0, cell: safeCell, x, y, bx: x, by: y, state: stateId, n: +(pack.cells.h[safeCell] < 20), u: {}, name: "Aster Guard"} as any);
     return i;
   });
   mocks.militarySetUnits.mockImplementation((stateId: number, regimentId: number, units: Record<string, number>) => {
@@ -207,6 +211,15 @@ function setupMap(): void {
     const regiment = pack.states[stateId]!.military!.find((item: any) => item.i === regimentId)!;
     regiment.bx = x;
     regiment.by = y;
+  });
+  mocks.militaryAttach.mockImplementation((stateId: number, regimentId: number, targetStateId: number, targetId: number) => {
+    const sourceList = pack.states[stateId]!.military!;
+    const targetList = pack.states[targetStateId]!.military!;
+    const source = sourceList.find((item: any) => item.i === regimentId)!;
+    const target = targetList.find((item: any) => item.i === targetId)!;
+    for (const [unit, count] of Object.entries(source.u ?? {})) target.u[unit] = (target.u[unit] ?? 0) + Number(count);
+    target.a = Object.values(target.u).reduce((total: number, count: any) => total + count, 0);
+    sourceList.splice(sourceList.indexOf(source), 1);
   });
   mocks.productionRegenerate.mockImplementation(() => {
     for (const state of pack.states) if (state.i) state.economy.treasury = 120;
@@ -412,6 +425,23 @@ describe("player mode campaign engine", () => {
     expect(getFunds(1)).toBe(before - cost);
   });
 
+  it("merges same-state regiments when they arrive on the same cell", () => {
+    const moving = raiseRegiment(1);
+    recruitRegiment(1, moving.i, "infantry", 100);
+    const stationed = {
+      i: 99, a: 200, cell: 1, x: 120, y: 100, bx: 120, by: 100,
+      state: 1, n: 0, u: {infantry: 200}, name: "Garde d'Aster"
+    };
+    pack.states[1]!.military!.push(stationed as any);
+
+    moveRegiment(1, moving.i, 1);
+
+    expect(pack.states[1]!.military).toHaveLength(1);
+    expect(pack.states[1]!.military![0]!.i).toBe(99);
+    expect(pack.states[1]!.military![0]!.a).toBe(300);
+    expect(mocks.militaryAttach).toHaveBeenCalledWith(1, moving.i, 1, 99);
+  });
+
   it("refuses to enter enemy land before a war has been declared", () => {
     const regiment = raiseRegiment(1);
     pack.cells.state[1] = 2;
@@ -434,6 +464,20 @@ describe("player mode campaign engine", () => {
     expect(pack.cells.state[1]).toBe(1);
     expect(regiment.cell).toBe(1);
     expect(getWarsForState(1)[0].score).toBe(5);
+  });
+
+  it("recruits and moves an AI nation to defend its territory during a war", () => {
+    setPlayerState(1);
+    pack.cells.state[1] = 1;
+    negotiate(1, 2, "guerre");
+
+    advanceTurn(1);
+
+    const aiArmy = pack.states[2]!.military ?? [];
+    expect(aiArmy.length).toBeGreaterThan(0);
+    expect(aiArmy.some((regiment: any) => regiment.cell === 1)).toBe(true);
+    expect(pack.cells.state[1]).toBe(2);
+    expect(getCampaign().aiNationTurns?.["2"]?.lastRecruitTurn).toBe(getCampaign().turn);
   });
 
   it("charges initial war mobilization, recurring upkeep and advances the abstract war", () => {
