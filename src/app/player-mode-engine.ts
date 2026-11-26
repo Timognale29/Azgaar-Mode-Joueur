@@ -524,6 +524,15 @@ export function moveRegiment(stateId: number, regimentId: number, targetCell: nu
         retreatGarrisonsFromCapturedCell(targetOwner, targetCell);
         const war = getActiveWar(stateId, targetOwner);
         if (war) war.score = clamp(war.score + (war.attacker === stateId ? 5 : -5), -100, 100);
+        if (getOrCreateCampaign().playerStateId === stateId) {
+          try {
+            // An invasion triggers immediate mobilization; the AI's next daily turn handles manoeuvres.
+            recruitAINation(targetOwner, getOrCreateCampaign().turn);
+            addLog(stateById(targetOwner).name + " mobilise des renforts après la perte d'une position.");
+          } catch {
+            // AI budget or map edge cases must never cancel a successful player move.
+          }
+        }
         addLog(regiment.name + " prend une case à " + stateById(stateId).name + " sur " + stateById(targetOwner).name + ". Résistance estimée : " + defence + " ; effectif engagé : " + troopCount + " ; pertes : " + attackerLosses + ".");
       } else {
         addLog(regiment.name + " occupe une case neutre.");
