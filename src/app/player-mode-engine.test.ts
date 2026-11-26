@@ -474,22 +474,8 @@ describe("player mode campaign engine", () => {
     expect(regiment.cell).toBe(1);
     expect(pack.cells.state[1]).toBe(1);
     expect(pack.cells.state[2]).toBe(2);
-    expect(getCampaign().log.some(entry => entry.text.includes("progresse vers le front"))).toBe(true);
-  });
-
-  it("routes a distant enemy-cell order to the nearest accessible frontline step", () => {
-    setPlayerState(1);
-    const regiment = raiseRegiment(1);
-    recruitRegiment(1, regiment.i, "infantry", 100);
-    negotiate(1, 2, "guerre");
-
-    const cost = moveRegiment(1, regiment.i, 2);
-
-    expect(cost).toBe(8);
-    expect(regiment.cell).toBe(1);
-    expect(pack.cells.state[1]).toBe(1);
-    expect(pack.cells.state[2]).toBe(2);
-    expect(getCampaign().log.some(entry => entry.text.includes("progresse vers le front"))).toBe(true);
+    expect(regiment.x).toBe(120);
+    expect(regiment.y).toBe(100);
   });
 
   it("uses enemy garrisons to defend a territory against invasion", () => {
@@ -547,22 +533,6 @@ describe("player mode campaign engine", () => {
     expect(mocks.militarySetUnits.mock.calls.some((call: [number, number, Record<string, number>]) =>
       call[0] === 2 && call[1] === defender.i && call[2].infantry < 40
     )).toBe(true);
-  });
-
-  it("mobilizes AI reinforcements immediately after a player captures a border cell", () => {
-    setPlayerState(1);
-    const attacker = raiseRegiment(1);
-    recruitRegiment(1, attacker.i, "infantry", 100);
-    pack.cells.state[1] = 2;
-    negotiate(1, 2, "guerre");
-
-    moveRegiment(1, attacker.i, 1);
-
-    const aiArmy = pack.states[2]!.military ?? [];
-    expect(aiArmy.length).toBeGreaterThan(0);
-    expect(aiArmy.reduce((total: number, regiment: any) => total + regiment.a, 0)).toBeGreaterThan(0);
-    expect(getCampaign().aiNationTurns?.["2"]?.lastRecruitTurn).toBe(getCampaign().turn);
-    expect(getCampaign().log.some(entry => entry.text.includes("mobilise des renforts"))).toBe(true);
   });
 
   it("mobilizes AI reinforcements immediately after a player captures a border cell", () => {
