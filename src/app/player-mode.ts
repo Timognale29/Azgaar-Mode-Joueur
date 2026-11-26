@@ -753,10 +753,14 @@ function handleMapClick(event: Event): void {
       const previousOwner = Number(globalThis.pack.cells.state[cell] ?? 0);
       const cost = moveRegiment(order.stateId, order.regimentId, cell);
       const newOwner = Number(globalThis.pack.cells.state[cell] ?? 0);
+      const merged = !(globalThis.pack.states[order.stateId]?.military ?? []).some(regiment => regiment.i === order.regimentId);
       Layers.draw("states", "borders", "provinces", "military", "burgIcons", "labels");
       const captured = newOwner === order.stateId && previousOwner !== order.stateId;
-      notify(captured ? "Territoire conquis" : "Ordre exécuté",
-        (captured ? "La case a rejoint ton État." : "Le régiment a rejoint sa destination.") + " Coût : " + formatMoney(cost) + ".");
+      const title = merged ? "Régiments rassemblés" : captured ? "Territoire conquis" : "Ordre exécuté";
+      const outcome = merged
+        ? "Le régiment a rejoint l'unité déjà présente sur cette case. Les effectifs ont été additionnés."
+        : captured ? "La case a rejoint ton État." : "Le régiment a rejoint sa destination.";
+      notify(title, outcome + " Coût : " + formatMoney(cost) + ".");
     } catch (error) {
       notify("Déplacement refusé", error instanceof Error ? error.message : String(error));
     }
