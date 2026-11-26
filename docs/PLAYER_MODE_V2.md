@@ -76,3 +76,5 @@ Le bouton **Journal** du bandeau donne accès aux 40 événements récents (dipl
 - L'IA peut progresser à travers les terres neutres pour atteindre un front, et pas uniquement rester bloquée dans ses propres cellules.
 - Les garnisons et l'appui des cases voisines pèsent davantage dans la résistance territoriale.
 - Les assauts victorieux coûtent désormais des effectifs à l'attaquant. Les garnisons vaincues se replient vers une cellule amie si possible et subissent des pertes ; celles sans voie de repli sont dissoutes.
+
+- En période de guerre, les gouvernements IA renforcent progressivement leur budget militaire et investissent dans les remparts puis les citadelles des villes menacées, en gardant une réserve de trésorerie.
