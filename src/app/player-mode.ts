@@ -96,6 +96,31 @@ function notify(title: string, message: string): void {
   Dialog.message({id: "playerCampaignNotice", title, message: body, width: "24em"});
 }
 
+function showCampaignJournal(): void {
+  const entries = getCampaign().log.slice(0, 40);
+  const body = element("div", "player-campaign-dialog-body player-campaign-journal");
+  body.append(element("p", "player-campaign-muted", "Les événements récents de ton pays et des autres nations apparaissent ici."));
+  if (!entries.length) {
+    body.append(element("p", "player-campaign-journal-empty", "Aucun événement pour le moment. Lance le temps pour voir les nations agir."));
+  } else {
+    for (const entry of entries) {
+      const row = element("article", "player-campaign-journal-entry");
+      row.append(
+        element("strong", "player-campaign-journal-turn", "Jour " + entry.turn),
+        element("p", "player-campaign-journal-text", entry.text)
+      );
+      body.append(row);
+    }
+  }
+  Dialog.message({
+    id: "playerCampaignJournal",
+    title: "Journal du monde",
+    message: body,
+    width: "34em",
+    maxHeight: 700
+  });
+}
+
 type TutorialPage = {title: string; paragraphs: string[]};
 const tutorialPages: TutorialPage[] = [
   {
@@ -142,7 +167,8 @@ const tutorialPages: TutorialPage[] = [
   {
     title: "Diplomatie, pause et remise à zéro",
     paragraphs: [
-      "Les relations permettent de proposer des alliances, des accords commerciaux, des embargos et la paix. Une guerre se poursuit au fil des jours et coûte de l'argent à chaque camp.",
+      "Les relations permettent de proposer des alliances, des accords commerciaux, des embargos et la paix. Les autres nations recrutent, négocient, peuvent déclarer des guerres et déplacent leurs régiments au fil du temps.",
+      "Le bouton Journal affiche les événements récents du monde : décisions diplomatiques, recrutements, déplacements, conquêtes et évolutions des conflits.",
       "Réinitialiser efface la progression de la campagne et restaure la carte telle qu'elle était au démarrage de cette partie : frontières, villes, bâtiments, budgets, relations, armées et projets.",
       "La remise à zéro demande toujours confirmation. Après le reset, clique sur Jouer pour choisir un pays et recommencer."
     ]
@@ -380,9 +406,10 @@ function createHud(): void {
     updateHud();
   }, "player-campaign-hud-button");
   modeButton = actionButton("Jouer", toggleMode, "player-campaign-hud-button player-campaign-mode-button");
+  const journalButton = actionButton("Journal", showCampaignJournal, "player-campaign-hud-button");
   helpButton = actionButton("Aide", () => showTutorial(), "player-campaign-hud-button");
   resetButton = actionButton("Réinitialiser", confirmReset, "player-campaign-hud-button player-campaign-reset-button");
-  hud.append(clockLabel, statusLabel, pauseButton, speedButton, modeButton, helpButton, resetButton);
+  hud.append(clockLabel, statusLabel, pauseButton, speedButton, modeButton, journalButton, helpButton, resetButton);
   document.body.append(hud);
   updateHud();
 }
