@@ -1470,12 +1470,12 @@ function advanceAINationArmy(stateId: number, turn: number): void {
   if (!available.length) return;
 
   // Preserve a capital garrison when the nation has multiple formed regiments.
-  const nonCapital = available.filter(regiment => getRegimentCell(regiment) !== capitalCell);
-  const movable = nonCapital.length
-    ? nonCapital
-    : available.length > 1
-      ? available.slice(0, -1) // retain one regiment as the capital reserve
-      : available;
+  const capitalGarrison = available.length > 1
+    ? available.find(regiment => getRegimentCell(regiment) === capitalCell)
+    : undefined;
+  const movable = capitalGarrison
+    ? available.filter(regiment => regiment.i !== capitalGarrison.i)
+    : available;
   const forces = movable.slice(0, 2);
   const usedSteps = new Set<number>();
   let moved = 0;
