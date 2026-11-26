@@ -1390,7 +1390,7 @@ function recruitAINation(stateId: number, turn: number): void {
     availableUnits[0];
   if (!preferred) return;
 
-  const maxRegiments = atWar ? 8 : 4;
+  const maxRegiments = atWar ? 12 : 4;
   let regiment = regiments
     .filter(candidate => Military.getTroops(candidate.a) < 750)
     .sort((a, b) => Military.getTroops(a.a) - Military.getTroops(b.a))[0];
@@ -1431,10 +1431,10 @@ function estimateCellResistance(defenderId: number, cellId: number): number {
     const troops = Military.getTroops(regiment.a);
     const stationedCell = getRegimentCell(regiment);
     if (stationedCell === cellId) return total + troops;
-    if (neighbors.has(stationedCell)) return total + troops * 0.3;
+    if (neighbors.has(stationedCell)) return total + troops * 0.4;
     return total;
   }, 0);
-  const fieldDefence = Math.min(4000, garrison * 1.15);
+  const fieldDefence = Math.min(6000, garrison * 1.25);
   return Math.ceil(
     18 +
     Math.sqrt(Math.max(0, Number(cells.pop?.[cellId] ?? 0))) * 0.35 +
@@ -1474,7 +1474,7 @@ function findAIFrontlineStep(stateId: number, enemyId: number, regiment: Regimen
         if (step >= 0 && (!best || resistance < best.resistance)) best = {step, resistance};
         continue;
       }
-      if (owner !== stateId || cells.h[neighbor] < 20 || visited[neighbor]) continue;
+      if ((owner !== stateId && owner !== 0) || cells.h[neighbor] < 20 || visited[neighbor]) continue;
       visited[neighbor] = 1;
       depth[neighbor] = depth[cell] + 1;
       firstStep[neighbor] = cell === start ? neighbor : firstStep[cell];
