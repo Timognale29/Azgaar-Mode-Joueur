@@ -363,6 +363,26 @@ function prepareStateCenterForCapture(ownerId: number, targetCell: number): void
   }
 }
 
+function findFriendlyApproachStep(stateId: number, originCell: number, enemyCell: number): number {
+  const cells = globalThis.pack.cells;
+  const approaches = (cells.c?.[enemyCell] ?? []).filter(cell =>
+    cells.h[cell] >= 20 && (Number(cells.state[cell] ?? 0) === stateId || Number(cells.state[cell] ?? 0) === 0)
+  );
+  let best: {step: number; length: number} | null = null;
+  for (const approach of approaches) {
+    if (approach === originCell) return approach;
+    try {
+      const route = findLandPath(originCell, approach, stateId);
+      if (route.cells.length < 2) continue;
+      if (!best || route.length < best.length) best = {step: route.cells[1], length: route.length};
+    } catch {
+      // This border cell cannot be reached through friendly or neutral land.
+    }
+  }
+  if (!best) throw new Error("Aucun chemin terrestre accessible ne mène à une position voisine de cette cible. Avance vers un autre front.");
+  return best.step;
+}
+
 /** Resolve the regiment's actual map cell from the same spatial index used by map clicks. */
 function getRegimentCell(regiment: Regiment): number {
   const x = Number(regiment.x);
@@ -443,16 +463,27 @@ export function moveRegiment(stateId: number, regimentId: number, targetCell: nu
   if (!Number.isInteger(targetCell) || targetCell < 0 || targetCell >= cells.i.length)
     throw new Error("Cellule de destination invalide.");
 
+  const requestedCell = targetCell;
+  const requestedOwner = Number(cells.state[requestedCell] ?? 0);
+  const requestedHostile = requestedOwner > 0 && requestedOwner !== stateId && getAttitude(stateId, requestedOwner) !== "Ally";
+  if (requestedHostile && !getActiveWar(stateId, requestedOwner))
+    throw new Error("Il faut d'abord déclarer la guerre à cet État depuis son panneau diplomatique.");
+
+  const originCell = getRegimentCell(regiment);
+  let advancingToFront = false;
+  if (requestedHostile && !(cells.c?.[originCell] ?? []).includes(requestedCell)) {
+    targetCell = findFriendlyApproachStep(stateId, originCell, requestedCell);
+    advancingToFront = true;
+  }
   const targetOwner = Number(cells.state[targetCell] ?? 0);
   const hostile = targetOwner > 0 && targetOwner !== stateId && getAttitude(stateId, targetOwner) !== "Ally";
   const neutralLand = targetOwner === 0 && cells.h[targetCell] >= 20;
   if (hostile && !getActiveWar(stateId, targetOwner))
     throw new Error("Il faut d'abord déclarer la guerre à cet État depuis son panneau diplomatique.");
-  const originCell = getRegimentCell(regiment);
   if (hostile || neutralLand) {
     const neighbors = cells.c?.[originCell] ?? [];
     if (!neighbors.includes(targetCell))
-      throw new Error("Cette case n'est pas directement voisine de la position réelle du régiment. Choisis une case adjacente ou avance par étapes.");
+      throw new Error("La prochaine étape du trajet n'est pas adjacente. Choisis une case voisine du régiment.");
   }
   if (targetOwner !== 0 && targetOwner !== stateId && !hostile && getAttitude(stateId, targetOwner) !== "Ally")
     throw new Error("Le passage sur ce territoire n'est pas autorisé.");
@@ -498,7 +529,9 @@ export function moveRegiment(stateId: number, regimentId: number, targetCell: nu
         addLog(regiment.name + " occupe une case neutre.");
       }
     } else {
-      addLog(regiment.name + " se déplace vers la cellule " + targetCell + ".");
+      addLog(advancingToFront
+        ? regiment.name + " progresse vers le front sur une position accessible avant d'attaquer la cellule " + requestedCell + "."
+        : regiment.name + " se déplace vers la cellule " + targetCell + ".");
     }
 
     const compatibleUnits = (state.military ?? []).filter(candidate =>
