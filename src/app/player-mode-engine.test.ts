@@ -425,6 +425,16 @@ describe("player mode campaign engine", () => {
     expect(getFunds(1)).toBe(before - cost);
   });
 
+  it("uses the regiment's real map position when its stored cell is stale", () => {
+    const regiment = raiseRegiment(1);
+    regiment.cell = 2; // Its visual coordinates still correspond to cell 0.
+    const cost = moveRegiment(1, regiment.i, 1);
+
+    expect(cost).toBe(8);
+    expect(regiment.cell).toBe(1);
+    expect(pack.cells.state[1]).toBe(1);
+  });
+
   it("merges same-state regiments when they arrive on the same cell", () => {
     const moving = raiseRegiment(1);
     recruitRegiment(1, moving.i, "infantry", 100);
@@ -458,6 +468,10 @@ describe("player mode campaign engine", () => {
     const defender = raiseRegiment(2);
     recruitRegiment(2, defender.i, "infantry", 200);
     defender.cell = 1;
+    defender.x = 120;
+    defender.y = 100;
+    defender.bx = 120;
+    defender.by = 100;
     pack.cells.state[1] = 2;
     negotiate(1, 2, "guerre");
 
@@ -477,7 +491,30 @@ describe("player mode campaign engine", () => {
     expect(cost).toBeGreaterThan(8);
     expect(pack.cells.state[1]).toBe(1);
     expect(regiment.cell).toBe(1);
+    expect(mocks.militarySetUnits).toHaveBeenCalled();
+    expect(regiment.a).toBeLessThan(100);
     expect(getWarsForState(1)[0].score).toBe(5);
+  });
+
+  it("retreats a defeated garrison and applies losses after a successful invasion", () => {
+    const attacker = raiseRegiment(1);
+    recruitRegiment(1, attacker.i, "infantry", 100);
+    const defender = raiseRegiment(2);
+    recruitRegiment(2, defender.i, "infantry", 40);
+    defender.cell = 1;
+    defender.x = 120;
+    defender.y = 100;
+    defender.bx = 120;
+    defender.by = 100;
+    pack.cells.state[1] = 2;
+    negotiate(1, 2, "guerre");
+
+    moveRegiment(1, attacker.i, 1);
+
+    expect(pack.cells.state[1]).toBe(1);
+    expect(pack.states[2]!.military!.some((regiment: any) => regiment.i === defender.i)).toBe(true);
+    expect(defender.cell).toBe(2);
+    expect(defender.a).toBeLessThan(40);
   });
 
   it("recruits and moves an AI nation to defend its territory during a war", () => {
