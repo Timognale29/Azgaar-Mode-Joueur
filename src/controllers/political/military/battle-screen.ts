@@ -1332,6 +1332,13 @@ function applyResults(): void {
     select<SVGGElement, unknown>("#armies").select(`g#${id} > text`).text(Military.getTotal(r)); // update reg box
 
     moveRegiment(r, r.px!, r.py!); // move regiment back to initial position
+
+    // Remove completely destroyed regiments from the state and map instead of leaving
+    // zero-strength objects behind that can reappear in later battles/redraws.
+    if (!Number.isFinite(r.a) || r.a <= 0 || Military.getTroops(r.a) <= 0) {
+      pack.states[r.state].military = (pack.states[r.state].military ?? []).filter(regiment => regiment.i !== r.i);
+      select<SVGGElement, unknown>("#armies").select(`g#${id}`).remove();
+    }
   }
 
   const i = (last(pack.markers)?.i ?? -1) + 1;
