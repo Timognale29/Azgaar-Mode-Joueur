@@ -38,6 +38,11 @@ export interface PlayerLogEntry {
   turn: number;
   text: string;
 }
+export interface AINationMemory {
+  lastDiplomacyTurn: number;
+  lastRecruitTurn: number;
+  lastMilitaryTurn: number;
+}
 export interface CampaignMapSnapshot {
   cellStates: number[];
   cellProvinces: number[];
@@ -67,6 +72,7 @@ export interface PlayerCampaign {
   wars: PlayerWar[];
   projects: PlayerProject[];
   log: PlayerLogEntry[];
+  aiNationTurns?: Record<string, AINationMemory>;
   initialMap?: CampaignMapSnapshot;
 }
 export interface TradeSummary {
@@ -226,6 +232,7 @@ function getOrCreateCampaign(): PlayerCampaign {
   campaign.wars ??= [];
   campaign.projects ??= [];
   campaign.log ??= [];
+  campaign.aiNationTurns ??= {};
   // Upgrade saves created before reset snapshots existed: preserve the map as it is now as a reset point.
   if (campaign.playerStateId && !campaign.initialMap) campaign.initialMap = captureInitialMap();
   if (!Number.isInteger(campaign.turn) || campaign.turn < 1) campaign.turn = 1;
@@ -426,6 +433,21 @@ export function moveRegiment(stateId: number, regimentId: number, targetCell: nu
     } else {
       addLog(regiment.name + " se déplace vers la cellule " + targetCell + ".");
     }
+
+    const compatibleUnits = (state.military ?? []).filter(candidate =>
+      candidate.i !== regimentId &&
+      candidate.cell === targetCell &&
+      Boolean(candidate.n) === Boolean(regiment.n)
+    );
+    if (compatibleUnits.length) {
+      const mergeTarget = compatibleUnits[0];
+      for (const candidate of compatibleUnits) {
+        if (candidate.i === mergeTarget.i) continue;
+        Military.attach(stateId, candidate.i, stateId, mergeTarget.i);
+      }
+      Military.attach(stateId, regimentId, stateId, mergeTarget.i);
+      addLog(regiment.name + " rejoint " + mergeTarget.name + " : les régiments présents sur la même case sont rassemblés.");
+    }
     return cost;
   } catch (error) {
     regiment.x = previous.x;
@@ -487,6 +509,17 @@ export function importCampaignData(raw: string): void {
     Number.isFinite(project.upkeep) && project.upkeep >= 0 &&
     (["market", "road", "urban_upgrade", "fortification", "citadel"] as string[]).includes(project.kind)
   ) : [];
+  const aiNationTurns: Record<string, AINationMemory> = {};
+  if (imported.aiNationTurns && typeof imported.aiNationTurns === "object") {
+    for (const [id, memory] of Object.entries(imported.aiNationTurns)) {
+      if (!stateExists(Number(id)) || !memory || typeof memory !== "object") continue;
+      aiNationTurns[id] = {
+        lastDiplomacyTurn: Number.isInteger(memory.lastDiplomacyTurn) ? memory.lastDiplomacyTurn : 0,
+        lastRecruitTurn: Number.isInteger(memory.lastRecruitTurn) ? memory.lastRecruitTurn : 0,
+        lastMilitaryTurn: Number.isInteger(memory.lastMilitaryTurn) ? memory.lastMilitaryTurn : 0
+      };
+    }
+  }
   campaign = {
     key: expectedKey,
     turn: imported.turn,
@@ -496,6 +529,7 @@ export function importCampaignData(raw: string): void {
     treaties,
     wars,
     projects,
+    aiNationTurns,
     log: Array.isArray(imported.log) ? imported.log.filter(entry => entry && Number.isInteger(entry.turn) && typeof entry.text === "string").slice(0, 80) : []
   };
   persist();
@@ -912,7 +946,11 @@ function warPower(stateId: number): number {
     treaty.kind === "alliance" &&
     (treaty.a === stateId || treaty.b === stateId)
   ).length;
-  return 10 + militaryBudget * 0.55 + alert * 3 + Math.log10(population + 10) * 5 + activeAllies * 4;
+  const troops = (state.military ?? []).reduce((total, regiment) =>
+    total + (regiment.n ? 0 : Military.getTroops(regiment.a)), 0
+  );
+  return 10 + militaryBudget * 0.55 + alert * 3 + Math.log10(population + 10) * 5 +
+    Math.log10(troops + 10) * 7 + activeAllies * 4;
 }
 
 function finishWar(war: PlayerWar, reason: "victory" | "stalemate", winner?: number): void {
@@ -1009,9 +1047,9 @@ export function negotiate(playerId: number, targetId: number, kind: TreatyKind |
   const target = stateById(targetId);
   if (playerId === targetId) throw new Error("Un État ne peut pas négocier avec lui-même.");
   const cost = kind === "guerre" ? WAR_MOBILIZATION_COST : DIPLOMACY_COST;
-  charge(playerId, cost, kind === "guerre" ? "Mobilisation diplomatique" : "Mission diplomatique");
   if (kind === "guerre") {
     if (getActiveWar(playerId, targetId)) throw new Error("Un conflit est déjà en cours entre ces deux États.");
+    charge(playerId, cost, "Mobilisation militaire");
     breakTreatiesBetween(playerId, targetId);
     States.setRelation(playerId, targetId, "Enemy");
     getOrCreateCampaign().wars.push({
@@ -1026,6 +1064,7 @@ export function negotiate(playerId: number, targetId: number, kind: TreatyKind |
     persist();
     return {accepted: true, score: relationScore(playerId, targetId), cost};
   }
+  charge(playerId, cost, "Mission diplomatique");
 
   const score = relationScore(playerId, targetId);
   const war = kind === "paix" ? getActiveWar(playerId, targetId) : undefined;
@@ -1186,6 +1225,215 @@ function updateAIEconomicPolicies(playerId: number): void {
   }
 }
 
+function getAINationMemory(stateId: number): AINationMemory {
+  const save = getOrCreateCampaign();
+  const id = String(stateId);
+  save.aiNationTurns ??= {};
+  save.aiNationTurns[id] ??= {lastDiplomacyTurn: 0, lastRecruitTurn: 0, lastMilitaryTurn: 0};
+  return save.aiNationTurns[id];
+}
+
+function countStateTroops(stateId: number): number {
+  return (stateById(stateId).military ?? []).reduce((total, regiment) =>
+    total + (regiment.n ? 0 : Military.getTroops(regiment.a)), 0
+  );
+}
+
+function aiNeighborStates(stateId: number): number[] {
+  const state = stateById(stateId);
+  const known = new Set((state.neighbors ?? []).filter(id => id > 0 && id !== stateId));
+  if (known.size) return [...known].filter(id => globalThis.pack.states[id] && !globalThis.pack.states[id].removed);
+  const cells = globalThis.pack.cells;
+  for (const cell of cells.i) {
+    if (cells.state[cell] !== stateId) continue;
+    for (const neighbor of cells.c?.[cell] ?? []) {
+      const owner = Number(cells.state[neighbor] ?? 0);
+      if (owner > 0 && owner !== stateId) known.add(owner);
+    }
+  }
+  return [...known].filter(id => globalThis.pack.states[id] && !globalThis.pack.states[id].removed);
+}
+
+function recruitAINation(stateId: number, turn: number): void {
+  const state = stateById(stateId);
+  const memory = getAINationMemory(stateId);
+  const regiments = (state.military ?? []).filter(regiment => !regiment.n);
+  const troops = countStateTroops(stateId);
+  const population = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
+  const targetStrength = clamp(Math.round(population * 0.012), 160, 1200);
+  const firstMobilization = troops < 1;
+  if (troops >= targetStrength || (!firstMobilization && turn - memory.lastRecruitTurn < 4)) return;
+
+  const availableUnits = options.map.military.units ?? [];
+  const preferred = availableUnits.find(unit => unit.type === "melee") ??
+    availableUnits.find(unit => unit.type !== "naval" && unit.type !== "aviation") ??
+    availableUnits[0];
+  if (!preferred) return;
+
+  let regiment = regiments
+    .filter(candidate => Military.getTroops(candidate.a) > 0)
+    .sort((a, b) => Military.getTroops(b.a) - Military.getTroops(a.a))[0];
+  if (!regiment) {
+    regiment = regiments[0];
+    if (!regiment) {
+      try {
+        regiment = raiseRegiment(stateId);
+      } catch {
+        return;
+      }
+    }
+  }
+
+  const costPerTroop = Math.max(0.5, Math.min(2.5, 0.65 + Math.max(0, Number(preferred.power) || 0) * 0.12));
+  const reserve = 100;
+  const affordable = Math.floor(Math.max(0, getFunds(stateId) - reserve) / costPerTroop);
+  const quantity = Math.min(250, Math.max(0, targetStrength - troops), affordable);
+  memory.lastRecruitTurn = turn;
+  if (quantity < 1) return;
+  try {
+    recruitRegiment(stateId, regiment.i, preferred.name, quantity);
+    addLog("Le gouvernement de " + state.name + " recrute " + quantity + " " + preferred.name + " pour renforcer son armée.");
+  } catch {
+    // A lack of treasury or an unavailable unit must not interrupt the world simulation.
+  }
+}
+
+function estimateCellResistance(defenderId: number, cellId: number): number {
+  const defender = stateById(defenderId);
+  const burgId = globalThis.pack.cells.burg[cellId];
+  const burg = burgId ? globalThis.pack.burgs[burgId] : undefined;
+  return Math.ceil(
+    18 +
+    Math.sqrt(Math.max(0, Number(globalThis.pack.cells.pop?.[cellId] ?? 0))) * 0.35 +
+    Math.sqrt(Math.max(0, Number(burg?.population ?? 0))) * 0.5 +
+    (burg?.walls ? 55 : 0) +
+    (burg?.citadel ? 100 : 0) +
+    (defender.economy.budget.military ?? 0) * 0.25
+  );
+}
+
+function findAIFrontlineStep(stateId: number, enemyId: number, regiment: Regiment): number | null {
+  const cells = globalThis.pack.cells;
+  const start = Number(regiment.cell);
+  if (!Number.isInteger(start) || start < 0 || start >= cells.i.length) return null;
+  const visited = new Uint8Array(cells.i.length);
+  const firstStep = new Int32Array(cells.i.length);
+  firstStep.fill(-1);
+  const depth = new Int32Array(cells.i.length);
+  const queue = new Int32Array(cells.i.length);
+  let head = 0;
+  let tail = 0;
+  queue[tail++] = start;
+  visited[start] = 1;
+  let targetDepth = Number.POSITIVE_INFINITY;
+  let best: {step: number; resistance: number} | null = null;
+
+  while (head < tail) {
+    const cell = queue[head++];
+    if (depth[cell] > targetDepth) break;
+    for (const neighbor of cells.c?.[cell] ?? []) {
+      const owner = Number(cells.state[neighbor] ?? 0);
+      if (owner === enemyId && cells.h[neighbor] >= 20) {
+        targetDepth = depth[cell];
+        const resistance = estimateCellResistance(enemyId, neighbor);
+        const step = cell === start ? neighbor : firstStep[cell];
+        if (step >= 0 && (!best || resistance < best.resistance)) best = {step, resistance};
+        continue;
+      }
+      if (owner !== stateId || cells.h[neighbor] < 20 || visited[neighbor]) continue;
+      visited[neighbor] = 1;
+      depth[neighbor] = depth[cell] + 1;
+      firstStep[neighbor] = cell === start ? neighbor : firstStep[cell];
+      queue[tail++] = neighbor;
+    }
+  }
+  return best?.step ?? null;
+}
+
+function advanceAINationArmy(stateId: number, turn: number): void {
+  const memory = getAINationMemory(stateId);
+  if (turn - memory.lastMilitaryTurn < 1) return;
+  const activeWars = getOrCreateCampaign().wars.filter(war =>
+    war.status === "active" && (war.attacker === stateId || war.defender === stateId)
+  );
+  if (!activeWars.length) return;
+  const state = stateById(stateId);
+  const regiment = (state.military ?? [])
+    .filter(candidate => !candidate.n && Military.getTroops(candidate.a) >= 80)
+    .sort((a, b) => Military.getTroops(b.a) - Military.getTroops(a.a))[0];
+  if (!regiment) return;
+
+  for (const war of activeWars) {
+    const enemyId = war.attacker === stateId ? war.defender : war.attacker;
+    const step = findAIFrontlineStep(stateId, enemyId, regiment);
+    if (step === null) continue;
+    memory.lastMilitaryTurn = turn;
+    try {
+      const previousOwner = Number(globalThis.pack.cells.state[step] ?? 0);
+      moveRegiment(stateId, regiment.i, step);
+      const captured = previousOwner === enemyId && Number(globalThis.pack.cells.state[step]) === stateId;
+      if (captured) addLog(state.name + " conquiert une position sur " + stateById(enemyId).name + " grâce à son armée.");
+    } catch {
+      // The AI will regroup or recruit and try again on a later day.
+    }
+    return;
+  }
+}
+
+function considerAINationDiplomacy(stateId: number, turn: number): void {
+  const memory = getAINationMemory(stateId);
+  if (turn - memory.lastDiplomacyTurn < 4) return;
+  const targets = aiNeighborStates(stateId)
+    .filter(targetId => !getActiveWar(stateId, targetId))
+    .map(targetId => ({targetId, score: relationScore(stateId, targetId)}));
+  if (!targets.length) return;
+
+  const friendly = targets
+    .filter(item => item.score >= 4)
+    .sort((a, b) => b.score - a.score)[0];
+  if (friendly) {
+    const kind: TreatyKind = friendly.score >= 34 && !treatyExists("alliance", stateId, friendly.targetId)
+      ? "alliance"
+      : "commerce";
+    if (!treatyExists(kind, stateId, friendly.targetId)) {
+      try {
+        const result = negotiate(stateId, friendly.targetId, kind);
+        memory.lastDiplomacyTurn = turn;
+        if (result.accepted) addLog(stateById(stateId).name + " conclut un accord " +
+          (kind === "alliance" ? "d'alliance" : "commercial") + " avec " + stateById(friendly.targetId).name + ".");
+        return;
+      } catch {
+        memory.lastDiplomacyTurn = turn;
+        return;
+      }
+    }
+  }
+
+  const rivals = targets
+    .filter(item => item.score <= -22)
+    .sort((a, b) => a.score - b.score);
+  if (!rivals.length || (turn + stateId * 7) % 6 !== 0) return;
+  const troops = countStateTroops(stateId);
+  if (troops < 160) return;
+  const target = rivals.find(item => warPower(stateId) >= warPower(item.targetId) * 0.82);
+  if (!target) return;
+  try {
+    negotiate(stateId, target.targetId, "guerre");
+    memory.lastDiplomacyTurn = turn;
+    addLog(stateById(stateId).name + " déclare la guerre à " + stateById(target.targetId).name + " après une montée des tensions.");
+  } catch {
+    memory.lastDiplomacyTurn = turn;
+  }
+}
+
+function runAINationTurns(playerId: number): void {
+  const save = getOrCreateCampaign();
+  const aiStates = livingStates().filter(state => state.i !== playerId);
+  for (const state of aiStates) recruitAINation(state.i, save.turn);
+  for (const state of aiStates) considerAINationDiplomacy(state.i, save.turn);
+  for (const state of aiStates) advanceAINationArmy(state.i, save.turn);
+}
+
 function simulateDay(playerId: number): {turn: number; changes: string[]} {
   stateById(playerId);
   const save = getOrCreateCampaign();
@@ -1249,6 +1497,7 @@ function simulateDay(playerId: number): {turn: number; changes: string[]} {
   save.turn++;
   updateAIEconomicPolicies(playerId);
   updateAIDiplomacy(playerId);
+  runAINationTurns(playerId);
   processWars();
   addLog(`Jour ${save.turn - 1} : production, commerce, fiscalité, populations et diplomatie actualisés.`);
   persist();
