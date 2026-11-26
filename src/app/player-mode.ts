@@ -722,7 +722,8 @@ function openRegimentCommand(stateId: number, regimentId: number): void {
     lockNativeRegimentEditor(stateId);
   }, "player-regiment-button"));
   orders.append(orderButtons);
-  orders.append(element("p", "player-regiment-muted", "Pour prendre une terre ennemie : déclare d'abord la guerre, puis choisis une case terrestre voisine. L'assaut est résolu automatiquement selon les effectifs et les défenses de la case."));
+  orders.append(element("p", "player-regiment-muted", "Combat : ouvre l'éditeur Azgaar, puis utilise son bouton d'attaque pour choisir un régiment ennemi. Valide les résultats pour appliquer les pertes ; les régiments entièrement détruits seront supprimés."));
+  orders.append(element("p", "player-regiment-muted", "Conquête : déclare d'abord la guerre, puis choisis une case terrestre voisine avec « Déplacer / envahir ». L'assaut territorial automatique dépend des effectifs et des défenses de la case."));
   body.append(orders);
 
   Dialog.message({
