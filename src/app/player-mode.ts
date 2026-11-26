@@ -1,3 +1,4 @@
+import "./player-mode.css";
 import type {} from "@/model/globals";
 import { Controllers } from "@/controllers";
 import { Military } from "@/model/political/military-generator";
