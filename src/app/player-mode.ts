@@ -64,6 +64,13 @@ function actionButton(label: string, action: () => void, className = "player-cam
   return button;
 }
 
+function nativeActionButton(label: string, action: () => void, className = "player-city-action-button"): HTMLButtonElement {
+  const button = element("button", className, label);
+  button.type = "button";
+  button.addEventListener("click", action);
+  return button;
+}
+
 function section(title: string, description = ""): HTMLElement {
   const wrapper = element("section", "player-campaign-section");
   wrapper.append(element("h3", "", title));
@@ -308,7 +315,7 @@ function showStateActions(stateId: number): void {
       row.append(element("span", "", regiment.name + " · " + Military.getTroops(regiment.a).toLocaleString("fr-FR") + " soldats"));
       row.append(actionButton("Gérer", () => {
         Dialog.close("playerStateDecisions");
-        Controllers.RegimentEditor.open("#regiment" + stateId + "-" + regiment.i);
+        openRegimentCommand(stateId, regiment.i);
       }));
       army.append(row);
     }
@@ -317,7 +324,7 @@ function showStateActions(stateId: number): void {
         const regiment = raiseRegiment(stateId);
         Layers.draw("military");
         Dialog.close("playerStateDecisions");
-        Controllers.RegimentEditor.open("#regiment" + stateId + "-" + regiment.i);
+        openRegimentCommand(stateId, regiment.i);
       } catch (error) {
         notify("Levée impossible", error instanceof Error ? error.message : String(error));
       }
@@ -390,105 +397,182 @@ function attachBurgActions(burgId: number): void {
   const burg = globalThis.pack.burgs[burgId];
   const body = document.getElementById("burgBody");
   if (!burg || !body) return;
+
   lockNativeBurgEditor();
-  body.querySelector("#playerCampaignCityActions")?.remove();
+  body.querySelector("#playerCampaignCityManagement")?.remove();
 
   const ownerId = Number(burg.state ?? 0);
-  const actions = element("div", "player-campaign-actions");
-  actions.id = "playerCampaignCityActions";
-  actions.append(element("h3", "", "Décisions de la ville"));
   const owner = globalThis.pack.states[ownerId];
-  actions.append(line("Territoire", owner?.fullName ?? owner?.name ?? "Terres neutres"));
+  const management = element("div", "player-city-management");
+  management.id = "playerCampaignCityManagement";
+
   if (!playerStateId || ownerId !== playerStateId) {
-    actions.append(element("p", "player-campaign-muted", "Cette ville n'appartient pas à votre État. Les modifications administratives sont verrouillées."));
-    if (ownerId > 0) actions.append(actionButton("Ouvrir les décisions de cet État", () => showStateActions(ownerId), "player-campaign-primary"));
-    body.append(actions);
-    return;
+    const ownership = element("div", "player-city-management-owner");
+    ownership.append(
+      element("div", "label", "Territoire :"),
+      element("span", "", owner?.fullName ?? owner?.name ?? "Terres neutres")
+    );
+    management.append(ownership);
+    if (ownerId > 0) {
+      management.append(nativeActionButton("Gouvernement", () => showStateActions(ownerId)));
+    } else {
+      management.append(element("p", "player-campaign-muted", "Cette localité n'appartient à aucun État."));
+    }
+  } else {
+    const fundsRow = element("div", "player-city-management-funds");
+    fundsRow.append(
+      element("div", "label", "Trésor :"),
+      element("strong", "", formatMoney(getFunds(ownerId)))
+    );
+    management.append(fundsRow, element("div", "label", "Aménagements :"));
+
+    const controls = element("div", "player-city-management-buttons");
+    const hasMarket = globalThis.pack.markets.some(market => market.centerBurgId === burgId);
+
+    const market = nativeActionButton(
+      hasMarket ? "Marché construit" : "Marché · " + formatMoney(marketCostFor(burgId, ownerId)),
+      () => runAction("Marché", () => buildMarket(burgId, ownerId), () => refreshNativeBurg(burgId))
+    );
+    market.disabled = hasMarket;
+    controls.append(market);
+
+    controls.append(nativeActionButton(
+      "Développer · " + formatMoney(urbanUpgradeCostFor(burgId, ownerId)),
+      () => runAction("Développement urbain", () => upgradeCity(burgId, ownerId), () => refreshNativeBurg(burgId))
+    ));
+
+    const walls = nativeActionButton(
+      burg.walls ? "Remparts construits" : "Remparts · " + formatMoney(fortificationCostFor(burgId, ownerId)),
+      () => runAction("Fortifications", () => buildCityFortification(burgId, ownerId), () => refreshNativeBurg(burgId))
+    );
+    walls.disabled = Boolean(burg.walls);
+    controls.append(walls);
+
+    const citadel = nativeActionButton(
+      burg.citadel ? "Citadelle construite" : "Citadelle · " + formatMoney(citadelCostFor(burgId, ownerId)),
+      () => runAction("Citadelle", () => buildCityCitadel(burgId, ownerId), () => refreshNativeBurg(burgId))
+    );
+    citadel.disabled = Boolean(burg.citadel);
+    controls.append(citadel);
+
+    management.append(
+      controls,
+      nativeActionButton("Gouvernement de " + (owner?.name ?? "l'État"), () => showStateActions(ownerId))
+    );
   }
 
-  actions.append(line("Fonds disponibles", formatMoney(getFunds(ownerId))));
-  const hasMarket = globalThis.pack.markets.some(market => market.centerBurgId === burgId);
-  const market = actionButton(
-    hasMarket ? "Marché déjà construit" : "Construire un marché · " + formatMoney(marketCostFor(burgId, ownerId)),
-    () => runAction("Marché", () => buildMarket(burgId, ownerId), () => refreshNativeBurg(burgId))
-  );
-  market.disabled = hasMarket;
-  const urban = actionButton("Développer la ville · " + formatMoney(urbanUpgradeCostFor(burgId, ownerId)),
-    () => runAction("Développement urbain", () => upgradeCity(burgId, ownerId), () => refreshNativeBurg(burgId)));
-  const walls = actionButton(burg.walls ? "Remparts construits" : "Construire des remparts · " + formatMoney(fortificationCostFor(burgId, ownerId)),
-    () => runAction("Fortifications", () => buildCityFortification(burgId, ownerId), () => refreshNativeBurg(burgId)));
-  walls.disabled = Boolean(burg.walls);
-  const citadel = actionButton(burg.citadel ? "Citadelle construite" : "Construire une citadelle · " + formatMoney(citadelCostFor(burgId, ownerId)),
-    () => runAction("Citadelle", () => buildCityCitadel(burgId, ownerId), () => refreshNativeBurg(burgId)));
-  citadel.disabled = Boolean(burg.citadel);
-  actions.append(market, urban, walls, citadel);
-  actions.append(actionButton("Consulter l'économie de la ville", () => Controllers.BurgEconomyOverview.open(burgId)));
-  actions.append(actionButton("Ouvrir le gouvernement de " + (owner?.name ?? "cet État"), () => showStateActions(ownerId)));
-  body.append(actions);
+  const tagsRow = document.getElementById("burgTags")?.parentElement;
+  if (tagsRow?.parentElement) tagsRow.insertAdjacentElement("afterend", management);
+  else body.append(management);
 }
 
 function lockNativeRegimentEditor(stateId: number): void {
-  const own = stateId === playerStateId;
   const composition = document.getElementById("regimentComposition");
   composition?.querySelectorAll<HTMLInputElement>("input").forEach(input => { input.disabled = true; });
-  const ids = ["regimentAdd", "regimentSplit", "regimentAttach", "regimentRemove"];
+
+  const ids = [
+    "regimentType", "regimentName", "regimentNameRestore", "regimentIconChange", "regimentTags",
+    "regimentAdd", "regimentSplit", "regimentAttach", "regimentToggleVisibility",
+    "regimentRegenerateLegend", "regimentLegend", "regimentRemove"
+  ];
   for (const id of ids) {
-    const button = document.getElementById(id) as HTMLButtonElement | null;
-    if (button) button.disabled = true;
+    const control = document.getElementById(id) as HTMLInputElement | HTMLSelectElement | HTMLButtonElement | null;
+    if (control) control.disabled = true;
   }
-  const name = document.getElementById("regimentName") as HTMLInputElement | null;
-  if (!own && name) name.disabled = true;
+  const attack = document.getElementById("regimentAttack") as HTMLButtonElement | null;
+  if (attack) {
+    attack.disabled = false;
+    attack.title = "Choisir un régiment ennemi à attaquer";
+  }
 }
 
-function attachRegimentActions(stateId: number, regimentId: number): void {
-  if (!campaignActive) return;
-  const body = document.getElementById("regimentBody");
-  const regiment = globalThis.pack.states[stateId]?.military?.find(item => item.i === regimentId);
-  if (!body || !regiment) return;
-  lockNativeRegimentEditor(stateId);
-  body.querySelector("#playerCampaignArmyActions")?.remove();
-  const actions = element("div", "player-campaign-actions");
-  actions.id = "playerCampaignArmyActions";
-  actions.append(element("h3", "", "Commandement"));
-  if (stateId !== playerStateId) {
-    actions.append(element("p", "player-campaign-muted", "Cette armée ne vous appartient pas. Vous pouvez consulter sa composition, mais pas lui donner d'ordres."));
-    body.append(actions);
-    return;
+function openRegimentCommand(stateId: number, regimentId: number): void {
+  if (!campaignActive || stateId !== playerStateId) return;
+  const state = globalThis.pack.states[stateId];
+  const regiment = state?.military?.find(item => item.i === regimentId);
+  if (!state || !regiment) return;
+
+  const body = element("div", "player-regiment-command");
+  const summary = element("div", "player-regiment-summary");
+  const addStat = (label: string, value: string) => {
+    const stat = element("div", "player-regiment-stat");
+    stat.append(element("span", "", label), element("strong", "", value));
+    summary.append(stat);
+  };
+  addStat("Effectif", Military.getTroops(regiment.a).toLocaleString("fr-FR") + " soldats");
+  addStat("Trésor", formatMoney(getFunds(stateId)));
+  addStat("Type", regiment.n ? "Flotte navale" : "Régiment terrestre");
+  addStat("Position", Math.round(regiment.x) + " · " + Math.round(regiment.y));
+  body.append(summary);
+
+  const composition = element("section", "player-regiment-section");
+  composition.append(element("div", "player-regiment-section-title", "Composition"));
+  const units = element("div", "player-regiment-composition");
+  for (const unit of options.map.military.units) {
+    const row = element("div", "player-regiment-row");
+    row.append(
+      element("span", "", unit.name),
+      element("strong", "", Military.getTroops(regiment.u[unit.name]).toLocaleString("fr-FR"))
+    );
+    units.append(row);
   }
-  actions.append(
-    line("Effectif", Military.getTroops(regiment.a).toLocaleString("fr-FR") + " soldats"),
-    line("Trésor", formatMoney(getFunds(stateId)))
+  composition.append(units);
+  body.append(composition);
+
+  const recruitment = element("section", "player-regiment-section");
+  recruitment.append(
+    element("div", "player-regiment-section-title", "Renforts"),
+    element("p", "player-regiment-muted", "Les nouvelles troupes sont payées par le trésor de l'État.")
   );
-  const unitSelect = element("select", "player-campaign-select");
+  const recruitControls = element("div", "player-regiment-recruit-row");
+  const unitSelect = element("select", "player-regiment-input");
   for (const unit of options.map.military.units) unitSelect.append(new Option(unit.name, unit.name));
-  const quantity = element("input", "player-campaign-input");
+  const quantity = element("input", "player-regiment-input");
   quantity.type = "number";
   quantity.min = "1";
   quantity.max = "50000";
   quantity.step = "1";
   quantity.value = "100";
-  const recruitment = section("Recrutement", "Les soldats sont ajoutés au régiment et débités du trésor.");
-  recruitment.append(unitSelect, quantity);
-  recruitment.append(actionButton("Recruter", () => {
+  recruitControls.append(unitSelect, quantity);
+  recruitment.append(recruitControls);
+  recruitment.append(nativeActionButton("Recruter", () => {
     try {
       const cost = recruitRegiment(stateId, regimentId, unitSelect.value, Number(quantity.value));
       Layers.draw("military");
-      Controllers.RegimentEditor.open("#regiment" + stateId + "-" + regimentId);
-      notify("Recrutement effectué", "Les nouvelles troupes ont rejoint " + regiment.name + ". Coût : " + formatMoney(cost) + ".");
+      Dialog.close("playerRegimentCommand");
+      openRegimentCommand(stateId, regimentId);
+      notify("Renforts recrutés", "Les troupes ont rejoint " + regiment.name + ". Coût : " + formatMoney(cost) + ".");
     } catch (error) {
       notify("Recrutement impossible", error instanceof Error ? error.message : String(error));
     }
-  }, "player-campaign-primary"));
-  actions.append(recruitment);
-  const movement = section("Déplacement", "Clique sur le bouton puis sur une cellule de votre territoire, d'une terre neutre ou d'un allié. Les déplacements sont limités par la distance et coûtent des fonds.");
-  movement.append(actionButton("Choisir une destination sur la carte", () => {
+  }, "player-regiment-button"));
+  body.append(recruitment);
+
+  const orders = element("section", "player-regiment-section");
+  orders.append(element("div", "player-regiment-section-title", "Ordres"));
+  const orderButtons = element("div", "player-regiment-order-buttons");
+  orderButtons.append(nativeActionButton("Déplacer le régiment", () => {
     pendingMove = {stateId, regimentId};
     if (statusLabel) statusLabel.textContent = "Clique sur la destination de " + regiment.name;
-    Dialog.close("regimentEditor");
+    Dialog.close("playerRegimentCommand");
     updateHud();
-  }, "player-campaign-primary"));
-  actions.append(movement);
-  body.append(actions);
+  }, "player-regiment-button"));
+  orderButtons.append(nativeActionButton("Attaquer un régiment ennemi", () => {
+    Dialog.close("playerRegimentCommand");
+    Controllers.RegimentEditor.open("#regiment" + stateId + "-" + regimentId);
+    lockNativeRegimentEditor(stateId);
+  }, "player-regiment-button"));
+  orders.append(orderButtons);
+  orders.append(element("p", "player-regiment-muted", "Le combat utilise l'écran de bataille natif d'Azgaar."));
+  body.append(orders);
+
+  Dialog.message({
+    id: "playerRegimentCommand",
+    title: "Commandement · " + regiment.name,
+    message: body,
+    width: "31em",
+    maxHeight: 680
+  });
 }
 
 function handleMapClick(event: Event): void {
@@ -521,7 +605,7 @@ function handleMapClick(event: Event): void {
   if (armyElement) {
     const stateId = Number(armyElement.dataset.state);
     const regimentId = Number(armyElement.dataset.id);
-    if (stateId === playerStateId) Controllers.RegimentEditor.open("#regiment" + stateId + "-" + regimentId);
+    if (stateId === playerStateId) openRegimentCommand(stateId, regimentId);
     else showStateActions(stateId);
     return;
   }
@@ -553,7 +637,7 @@ export const PlayerMode = {
     });
     window.addEventListener("azgaar:regiment-editor-open", event => {
       const detail = (event as CustomEvent<{stateId: number; regimentId: number}>).detail;
-      if (detail) attachRegimentActions(detail.stateId, detail.regimentId);
+      if (detail && campaignActive) lockNativeRegimentEditor(detail.stateId);
     });
     window.addEventListener("map:generated", () => {
       playerStateId = getPlayerStateId();
