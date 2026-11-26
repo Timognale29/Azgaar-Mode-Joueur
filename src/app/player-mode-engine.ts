@@ -41,6 +41,7 @@ export interface PlayerLogEntry {
 export interface CampaignMapSnapshot {
   cellStates: number[];
   cellProvinces: number[];
+  cellMarkets: number[];
   states: Array<{
     i: number;
     center: number;
@@ -50,7 +51,7 @@ export interface CampaignMapSnapshot {
     military: Regiment[];
     provinces: number[];
   }>;
-  burgs: Array<{i: number; state: number; population?: number; walls?: number; citadel?: number; capital?: number}>;
+  burgs: Array<{i: number; state: number; population?: number; walls?: number; citadel?: number; capital?: number; group?: string}>;
   provinces: unknown[];
   markets: unknown[];
   routes: Route[];
@@ -101,6 +102,7 @@ function captureInitialMap(): CampaignMapSnapshot {
   return {
     cellStates: Array.from(cells.state),
     cellProvinces: Array.from(cells.province ?? []),
+    cellMarkets: Array.from(cells.market ?? []),
     states: livingStates().map(state => ({
       i: state.i,
       center: state.center,
@@ -116,7 +118,8 @@ function captureInitialMap(): CampaignMapSnapshot {
       population: burg.population,
       walls: burg.walls,
       citadel: burg.citadel,
-      capital: burg.capital
+      capital: burg.capital,
+      group: burg.group
     })),
     provinces: cloneData(globalThis.pack.provinces ?? []),
     markets: cloneData(globalThis.pack.markets ?? []),
@@ -151,7 +154,9 @@ function restoreInitialMap(snapshot: CampaignMapSnapshot): void {
     burg.walls = saved.walls;
     burg.citadel = saved.citadel;
     burg.capital = saved.capital;
+    burg.group = saved.group;
   }
+  if (cells.market) snapshot.cellMarkets.forEach((marketId, cellId) => { cells.market[cellId] = marketId; });
   globalThis.pack.markets = cloneData(snapshot.markets) as typeof globalThis.pack.markets;
   globalThis.pack.routes = cloneData(snapshot.routes);
   cells.routes = cloneData(snapshot.routeLinks) as typeof cells.routes;
