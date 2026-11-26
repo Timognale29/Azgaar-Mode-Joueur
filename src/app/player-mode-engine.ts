@@ -1326,13 +1326,52 @@ function updateAIEconomicPolicies(playerId: number): void {
       changes.administration = Math.max(changes.administration ?? finance.budget.administration, 20);
       changes.infrastructure = Math.max(changes.infrastructure ?? finance.budget.infrastructure, 18);
     }
-    if (atWar) changes.military = Math.min(100, Math.max(changes.military ?? finance.budget.military, finance.budget.military + 3));
+    if (atWar) changes.military = Math.min(100, Math.max(changes.military ?? finance.budget.military, Math.ceil(finance.budget.military * 1.15), finance.budget.military + 5));
     const taxChanged = salesTax !== currentSalesTax || pollTax !== currentPollTax;
     const budgetChanged = Object.entries(changes).some(([key, value]) => value !== finance.budget[key as keyof typeof finance.budget]);
     if (taxChanged) States.setTaxes(state.i, salesTax, pollTax);
     if (budgetChanged) States.setBudget(state.i, changes);
     if (taxChanged || budgetChanged)
       addLog("Le gouvernement de " + state.name + " ajuste sa fiscalité ou son budget en réaction à sa situation économique.");
+  }
+}
+
+function fortifyAINation(stateId: number): void {
+  const state = stateById(stateId);
+  const activeWars = getOrCreateCampaign().wars.filter(war =>
+    war.status === "active" && (war.attacker === stateId || war.defender === stateId)
+  );
+  if (!activeWars.length) return;
+  const enemyIds = new Set(activeWars.map(war => war.attacker === stateId ? war.defender : war.attacker));
+  const burgs = globalThis.pack.burgs.filter(burg =>
+    burg?.i && !burg.removed && burg.state === stateId && Number.isInteger(burg.cell)
+  );
+  const threatened = burgs.filter(burg =>
+    (globalThis.pack.cells.c?.[burg.cell] ?? []).some(cell => enemyIds.has(Number(globalThis.pack.cells.state[cell] ?? 0)))
+  );
+  const capital = globalThis.pack.burgs[state.capital];
+  const priorities = [...threatened.sort((a, b) => (b.population ?? 0) - (a.population ?? 0))];
+  if (capital && !capital.removed && !priorities.some(burg => burg.i === capital.i)) priorities.push(capital);
+
+  for (const burg of priorities) {
+    try {
+      if (!burg.walls) {
+        const cost = fortificationCostFor(burg.i, stateId);
+        if (getFunds(stateId) < cost + 450) continue;
+        buildCityFortification(burg.i, stateId);
+        addLog(state.name + " fortifie " + burg.name + " pour protéger son territoire en guerre.");
+        return;
+      }
+      if (!burg.citadel) {
+        const cost = citadelCostFor(burg.i, stateId);
+        if (getFunds(stateId) < cost + 650) continue;
+        buildCityCitadel(burg.i, stateId);
+        addLog(state.name + " renforce la défense de " + burg.name + " avec une citadelle.");
+        return;
+      }
+    } catch {
+      // A city that cannot be upgraded must not block other AI decisions.
+    }
   }
 }
 
@@ -1586,6 +1625,7 @@ function considerAINationDiplomacy(stateId: number, turn: number): void {
 function runAINationTurns(playerId: number): void {
   const save = getOrCreateCampaign();
   const aiStates = livingStates().filter(state => state.i !== playerId);
+  for (const state of aiStates) fortifyAINation(state.i);
   for (const state of aiStates) recruitAINation(state.i, save.turn);
   for (const state of aiStates) considerAINationDiplomacy(state.i, save.turn);
   for (const state of aiStates) advanceAINationArmy(state.i, save.turn);
