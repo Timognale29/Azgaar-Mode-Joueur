@@ -1228,7 +1228,7 @@ function simulateDay(playerId: number): {turn: number; changes: string[]} {
 
   // City growth is affected by local prosperity and the state's cultural development.
   for (const burg of globalThis.pack.burgs.filter(item => item?.i && !item.removed && item.state)) {
-    const state = statesById.get(burg.state);
+    const state = statesById.get(Number(burg.state ?? 0));
     const population = burg.population ?? 0;
     if (!state || population <= 0) continue;
     const prosperity = Accounts.ofState(state.i)?.prosperity ?? 0.5;
